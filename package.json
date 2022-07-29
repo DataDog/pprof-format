@@ -1,0 +1,32 @@
+{
+  "name": "pprof-format",
+  "version": "1.0.0",
+  "description": "Pure JavaScript pprof encoder and decoder",
+  "type": "module",
+  "module": "index.js",
+  "main": "index.cjs",
+  "exports": {
+    "import": "./index.js",
+    "default": "./index.cjs"
+  },
+  "scripts": {
+    "build": "ascjs index.js index.cjs && ascjs test.js test.cjs",
+    "lint": "standard",
+    "prepublishOnly": "npm run build",
+    "pretest": "npm run build",
+    "test": "node test.cjs"
+  },
+  "keywords": [
+    "pprof",
+    "encode",
+    "decode",
+    "profile"
+  ],
+  "author": "Stephen Belanger <admin@stephenbelanger.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "ascjs": "^5.0.1",
+    "standard": "^17.0.0",
+    "tap": "^16.3.0"
+  }
+}

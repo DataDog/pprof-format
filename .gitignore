@@ -1,0 +1,10 @@
+# Ignore common dot-files
+.vscode
+
+# Ignore dependencies and lock files 
+node_modules
+package-lock.json
+yarn.lock
+
+# Ignore CJS files
+*.cjs
