@@ -267,11 +267,16 @@ function decode<T>(
   return data
 }
 
+export type ValueTypeInput = {
+  type?: Numeric
+  unit?: Numeric
+}
+
 export class ValueType {
   type: Numeric
   unit: Numeric
 
-  constructor(data: DeepPartial<ValueType>) {
+  constructor(data: ValueTypeInput) {
     this.type = data.type || 0
     this.unit = data.unit || 0
   }
@@ -284,10 +289,6 @@ export class ValueType {
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    return this._valueType_encodeToBuffer(buffer, offset)
-  }
-
-  _valueType_encodeToBuffer(buffer: Uint8Array, offset = 0): number {
     if (this.type) {
       buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
       offset = encodeNumber(buffer, offset, this.type)
@@ -306,7 +307,7 @@ export class ValueType {
     return buffer
   }
 
-  static decodeValue(data: DeepPartial<ValueType>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: ValueTypeInput, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.type = decodeNumber(buffer)
@@ -318,8 +319,15 @@ export class ValueType {
   }
 
   static decode(buffer: Uint8Array): ValueType {
-    return new this(decode(buffer, this.decodeValue))
+    return new this(decode(buffer, this.decodeValue) as ValueTypeInput)
   }
+}
+
+export type LabelInput = {
+  key?: Numeric
+  str?: Numeric
+  num?: Numeric
+  numUnit?: Numeric
 }
 
 export class Label {
@@ -328,7 +336,7 @@ export class Label {
   num: Numeric
   numUnit: Numeric
 
-  constructor(data: DeepPartial<Label>) {
+  constructor(data: LabelInput) {
     this.key = data.key || 0
     this.str = data.str || 0
     this.num = data.num || 0
@@ -373,7 +381,7 @@ export class Label {
     return buffer
   }
 
-  static decodeValue(data: DeepPartial<Label>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: LabelInput, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.key = decodeNumber(buffer)
@@ -391,8 +399,14 @@ export class Label {
   }
 
   static decode(buffer: Uint8Array): Label {
-    return new this(decode(buffer, this.decodeValue))
+    return new this(decode(buffer, this.decodeValue) as LabelInput)
   }
+}
+
+export type SampleInput = {
+  locationId?: Array<Numeric>
+  value?: Array<Numeric>
+  label?: Array<LabelInput>
 }
 
 export class Sample {
@@ -400,7 +414,7 @@ export class Sample {
   value: Array<Numeric>
   label: Array<Label>
 
-  constructor(data: DeepPartial<Sample>) {
+  constructor(data: SampleInput) {
     this.locationId = data.locationId || []
     this.value = data.value || []
     this.label = (data.label || []).map(l => new Label(l))
@@ -445,7 +459,7 @@ export class Sample {
     return buffer
   }
 
-  static decodeValue(data: DeepPartial<Sample>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: SampleInput, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.locationId = decodeNumbers(buffer)
@@ -460,8 +474,21 @@ export class Sample {
   }
 
   static decode(buffer: Uint8Array): Sample {
-    return new this(decode(buffer, this.decodeValue))
+    return new this(decode(buffer, this.decodeValue) as SampleInput)
   }
+}
+
+export type MappingInput = {
+  id?: Numeric
+  memoryStart?: Numeric
+  memoryLimit?: Numeric
+  fileOffset?: Numeric
+  filename?: Numeric
+  buildId?: Numeric
+  hasFunctions?: boolean
+  hasFilenames?: boolean
+  hasLineNumbers?: boolean
+  hasInlineFrames?: boolean
 }
 
 export class Mapping {
@@ -476,7 +503,7 @@ export class Mapping {
   hasLineNumbers: boolean
   hasInlineFrames: boolean
 
-  constructor(data: DeepPartial<Mapping>) {
+  constructor(data: MappingInput) {
     this.id = data.id || 0
     this.memoryStart = data.memoryStart || 0
     this.memoryLimit = data.memoryLimit || 0
@@ -553,7 +580,7 @@ export class Mapping {
     return buffer
   }
 
-  static decodeValue(data: DeepPartial<Mapping>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: MappingInput, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.id = decodeNumber(buffer)
@@ -589,15 +616,20 @@ export class Mapping {
   }
 
   static decode(buffer: Uint8Array): Mapping {
-    return new this(decode(buffer, this.decodeValue))
+    return new this(decode(buffer, this.decodeValue) as MappingInput)
   }
+}
+
+export type LineInput = {
+  functionId?: Numeric
+  line?: Numeric
 }
 
 export class Line {
   functionId: Numeric
   line: Numeric
 
-  constructor(data: DeepPartial<Line>) {
+  constructor(data: LineInput) {
     this.functionId = data.functionId || 0
     this.line = data.line || 0
   }
@@ -628,7 +660,7 @@ export class Line {
     return buffer
   }
 
-  static decodeValue(data: DeepPartial<Line>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: LineInput, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.functionId = decodeNumber(buffer)
@@ -640,8 +672,16 @@ export class Line {
   }
 
   static decode(buffer: Uint8Array): Line {
-    return new this(decode(buffer, this.decodeValue))
+    return new this(decode(buffer, this.decodeValue) as LineInput)
   }
+}
+
+export type LocationInput = {
+  id?: Numeric
+  mappingId?: Numeric
+  address?: Numeric
+  line?: Array<LineInput>
+  isFolded?: boolean
 }
 
 export class Location {
@@ -651,7 +691,7 @@ export class Location {
   line: Array<Line>
   isFolded: boolean
 
-  constructor(data: DeepPartial<Location>) {
+  constructor(data: LocationInput) {
     this.id = data.id || 0
     this.mappingId = data.mappingId || 0
     this.address = data.address || 0
@@ -700,7 +740,7 @@ export class Location {
     return buffer
   }
 
-  static decodeValue(data: DeepPartial<Location>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: LocationInput, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.id = decodeNumber(buffer)
@@ -721,8 +761,16 @@ export class Location {
   }
 
   static decode(buffer: Uint8Array): Location {
-    return new this(decode(buffer, this.decodeValue))
+    return new this(decode(buffer, this.decodeValue) as LocationInput)
   }
+}
+
+export type FunctionInput = {
+  id?: Numeric
+  name?: Numeric
+  systemName?: Numeric
+  filename?: Numeric
+  startLine?: Numeric
 }
 
 export class Function {
@@ -732,7 +780,7 @@ export class Function {
   filename: Numeric
   startLine: Numeric
 
-  constructor(data: DeepPartial<Function>) {
+  constructor(data: FunctionInput) {
     this.id = data.id || 0
     this.name = data.name || 0
     this.systemName = data.systemName || 0
@@ -780,7 +828,7 @@ export class Function {
     return buffer
   }
 
-  static decodeValue(data: DeepPartial<Function>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: FunctionInput, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.id = decodeNumber(buffer)
@@ -801,8 +849,25 @@ export class Function {
   }
 
   static decode(buffer: Uint8Array): Function {
-    return new this(decode(buffer, this.decodeValue))
+    return new this(decode(buffer, this.decodeValue) as FunctionInput)
   }
+}
+
+export type ProfileInput = {
+  sampleType?: Array<ValueTypeInput>
+  sample?: Array<SampleInput>
+  mapping?: Array<MappingInput>
+  location?: Array<LocationInput>
+  function?: Array<FunctionInput>
+  stringTable?: StringTable | string[]
+  dropFrames?: Numeric
+  keepFrames?: Numeric
+  timeNanos?: Numeric
+  durationNanos?: Numeric
+  periodType?: ValueTypeInput
+  period?: Numeric
+  comment?: Array<Numeric>
+  defaultSampleType?: Numeric
 }
 
 export class Profile {
@@ -821,13 +886,13 @@ export class Profile {
   comment: Array<Numeric>
   defaultSampleType: Numeric
 
-  constructor(data: DeepPartial<Profile> = {}) {
+  constructor(data: ProfileInput = {}) {
     this.sampleType = (data.sampleType || []).map(v => new ValueType(v))
     this.sample = (data.sample || []).map(v => new Sample(v))
     this.mapping = (data.mapping || []).map(v => new Mapping(v))
     this.location = (data.location || []).map(v => new Location(v))
     this.function = (data.function || []).map(v => new Function(v))
-    this.stringTable = StringTable.from((data.stringTable as StringTable) || [])
+    this.stringTable = StringTable.from(data.stringTable || [])
     this.dropFrames = data.dropFrames || 0
     this.keepFrames = data.keepFrames || 0
     this.timeNanos = data.timeNanos || 0
@@ -942,7 +1007,7 @@ export class Profile {
     return buffer
   }
 
-  static decodeValue(data: DeepPartial<Profile>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: ProfileInput, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.sampleType = push(ValueType.decode(buffer), data.sampleType)
@@ -992,6 +1057,6 @@ export class Profile {
   }
 
   static decode(buffer: Uint8Array): Profile {
-    return new this(decode(buffer, this.decodeValue))
+    return new this(decode(buffer, this.decodeValue) as ProfileInput)
   }
 }
