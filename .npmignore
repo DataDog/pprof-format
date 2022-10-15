@@ -1,0 +1,6 @@
+!dist
+src
+.eslintrc.js
+tsconfig.json
+example.js
+.gitignore
