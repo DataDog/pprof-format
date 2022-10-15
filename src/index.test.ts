@@ -1,6 +1,5 @@
-/* global describe, it */
-
 import tap from 'tap'
+import type Tap from 'tap'
 
 import {
   Function,
@@ -12,14 +11,27 @@ import {
   Sample,
   ValueType,
   StringTable
-} from 'pprof-format'
+} from './index.js'
 
-const { test } = tap
+type Data = {
+  [key: string]: any
+}
 
-tap.Test.prototype.addAssert('constructs', 3, function (Type, data, encodings, message) {
+type Encoding = {
+  field: string
+  value: string
+}
+
+interface TestSuite extends Tap.Test {
+  constructs(Type: any, data: Data, encodings: Encoding[], message?: string): void
+  encodes(Type: any, data: Data, encodings: Encoding[], message?: string): void
+  decodes(Type: any, data: Data, encodings: Encoding[], message?: string): void
+}
+
+tap.Test.prototype.addAssert('constructs', 3, function (Type: any, data: Data, encodings: Encoding[], message: string) {
   message = message || 'construction'
 
-  return this.test(message, (t) => {
+  return this.test(message, (t: TestSuite) => {
     const value = new Type(data)
     for (const { field } of encodings) {
       if (typeof data[field] === 'object') {
@@ -32,63 +44,51 @@ tap.Test.prototype.addAssert('constructs', 3, function (Type, data, encodings, m
   })
 })
 
-tap.Test.prototype.addAssert('encodes', 3, function (Type, data, encodings, message) {
+tap.Test.prototype.addAssert('encodes', 3, function (Type: any, data: Data, encodings: Encoding[], message: string) {
   message = message || 'encoding'
 
-  return this.test(message, (t) => {
-    t.test('per-field validation', (t) => {
+  return this.test(message, (t: TestSuite) => {
+    t.test('per-field validation', (t2: TestSuite) => {
       for (const { field, value } of encodings) {
         const fun = new Type({ [field]: data[field] })
-        t.equal(
-          bufToHex(fun.encode()),
-          value,
-          `has expected encoding of ${field} field`
-        )
+        const msg = `has expected encoding of ${field} field`
+        t2.equal(bufToHex(fun.encode()), value, msg)
       }
-      t.end()
+      t2.end()
     })
 
-    t.test('full object validation', (t) => {
+    t.test('full object validation', (t2: TestSuite) => {
       const fun = new Type(data)
-      t.equal(
+      t2.equal(
         bufToHex(fun.encode()),
         fullEncoding(encodings),
         'has expected encoding of full object'
       )
-      t.end()
+      t2.end()
     })
 
     t.end()
   })
 })
 
-tap.Test.prototype.addAssert('decodes', 3, function (Type, data, encodings, message) {
+tap.Test.prototype.addAssert('decodes', 3, function (Type: any, data: Data, encodings: Encoding[], message: string) {
   message = message || 'decoding'
 
-  const fullEncoding = encodings.map(e => e.value).join('')
-
-  return this.test(message, (t) => {
-    t.test('per-field validation', (t) => {
+  return this.test(message, (t: TestSuite) => {
+    t.test('per-field validation', (t2: TestSuite) => {
       for (const { field, value } of encodings) {
         if (!value) continue
         const fun = Type.decode(hexToBuf(value))
-        t.has(
-          fun,
-          { [field]: data[field] },
-          `has expected decoding of ${field} field`
-        )
+        const msg = `has expected decoding of ${field} field`
+        t2.has(fun, { [field]: data[field] }, msg)
       }
-      t.end()
+      t2.end()
     })
 
-    t.test('full object validation', (t) => {
-      const fun = Type.decode(hexToBuf(fullEncoding))
-      t.has(
-        fun,
-        data,
-        'has expected encoding of full object'
-      )
-      t.end()
+    t.test('full object validation', (t2: TestSuite) => {
+      const fun = Type.decode(hexToBuf(fullEncoding(encodings)))
+      t2.has(fun, data, 'has expected encoding of full object')
+      t2.end()
     })
 
     t.end()
@@ -113,7 +113,7 @@ const functionEncodings = [
   { field: 'startLine', value: '289506' }
 ]
 
-test('Function', (t) => {
+tap.test('Function', (t: TestSuite) => {
   t.constructs(Function, functionData, functionEncodings)
   t.encodes(Function, functionData, functionEncodings)
   t.decodes(Function, functionData, functionEncodings)
@@ -134,7 +134,7 @@ const labelEncodings = [
   { field: 'numUnit', value: '2006' }
 ]
 
-test('Label', (t) => {
+tap.test('Label', (t: TestSuite) => {
   t.constructs(Label, labelData, labelEncodings)
   t.encodes(Label, labelData, labelEncodings)
   t.decodes(Label, labelData, labelEncodings)
@@ -151,7 +151,7 @@ const lineEncodings = [
   { field: 'line', value: '10ae2c' },
 ]
 
-test('Line', (t) => {
+tap.test('Line', (t: TestSuite) => {
   t.constructs(Line, lineData, lineEncodings)
   t.encodes(Line, lineData, lineEncodings)
   t.decodes(Line, lineData, lineEncodings)
@@ -162,7 +162,7 @@ const locationData = {
   id: 12,
   mappingId: 34,
   address: 56,
-  line: [ lineData ],
+  line: [lineData],
   isFolded: true
 }
 
@@ -174,7 +174,7 @@ const locationEncodings = [
   { field: 'isFolded', value: '2801' },
 ]
 
-test('Location', (t) => {
+tap.test('Location', (t: TestSuite) => {
   t.constructs(Location, locationData, locationEncodings)
   t.encodes(Location, locationData, locationEncodings)
   t.decodes(Location, locationData, locationEncodings)
@@ -207,7 +207,7 @@ const mappingEncodings = [
   { field: 'hasInlineFrames', value: '5001' },
 ]
 
-test('Mapping', (t) => {
+tap.test('Mapping', (t: TestSuite) => {
   t.constructs(Mapping, mappingData, mappingEncodings)
   t.encodes(Mapping, mappingData, mappingEncodings)
   t.decodes(Mapping, mappingData, mappingEncodings)
@@ -226,7 +226,7 @@ const sampleEncodings = [
   { field: 'label', value: embeddedField('1a', labelEncodings) },
 ]
 
-test('Sample', (t) => {
+tap.test('Sample', (t: TestSuite) => {
   t.constructs(Sample, sampleData, sampleEncodings)
   t.encodes(Sample, sampleData, sampleEncodings)
   t.decodes(Sample, sampleData, sampleEncodings)
@@ -243,7 +243,7 @@ const valueTypeEncodings = [
   { field: 'unit', value: '100a' },
 ]
 
-test('ValueType', (t) => {
+tap.test('ValueType', (t: TestSuite) => {
   t.constructs(ValueType, valueTypeData, valueTypeEncodings)
   t.encodes(ValueType, valueTypeData, valueTypeEncodings)
   t.decodes(ValueType, valueTypeData, valueTypeEncodings)
@@ -280,43 +280,40 @@ const profileEncodings = [
   { field: 'comment', value: '6a010b' },
 ]
 
-test('Profile', (t) => {
+tap.test('Profile', (t: TestSuite) => {
   t.constructs(Profile, profileData, profileEncodings)
   t.encodes(Profile, profileData, profileEncodings)
   t.decodes(Profile, profileData, profileEncodings)
   t.end()
 })
 
-function encodeStringTable (stringTable) {
-  return stringTable
-    .slice(1)
-    .map(s => {
-      const buf = new TextEncoder().encode(s)
-      return `32${hexNum(buf.length)}${bufToHex(buf)}`
-    })
-    .join('')
+function encodeStringTable(strings: StringTable) {
+  return strings.slice(1).map(s => {
+    const buf = new TextEncoder().encode(s)
+    return `32${hexNum(buf.length)}${bufToHex(buf)}`
+  }).join('')
 }
 
-function hexNum (num) {
+function hexNum(num: number) {
   let str = num.toString(16)
   if (str.length % 2) str = '0' + str
   return str
 }
 
-function embeddedField (fieldBit, data) {
+function embeddedField(fieldBit: string, data: Encoding[]) {
   const encoded = fullEncoding(data)
   const size = hexNum(encoded.length / 2)
-  return [fieldBit,size,encoded].join('')
+  return [fieldBit, size, encoded].join('')
 }
 
-function fullEncoding (encodings) {
+function fullEncoding(encodings: Encoding[]) {
   return encodings.map(e => e.value).join('')
 }
 
-function hexToBuf (hex) {
-  return Uint8Array.from(hex.match(/.{2}/g).map(v => parseInt(v, 16)))
+function hexToBuf(hex: string) {
+  return Uint8Array.from((hex.match(/.{2}/g) || []).map(v => parseInt(v, 16)))
 }
 
-function bufToHex (buf) {
+function bufToHex(buf: Uint8Array) {
   return Array.from(buf).map(hexNum).join('')
 }

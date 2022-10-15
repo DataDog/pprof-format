@@ -1,34 +1,26 @@
 {
   "name": "pprof-format",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "Pure JavaScript pprof encoder and decoder",
-  "type": "module",
-  "module": "index.js",
-  "main": "index.cjs",
-  "exports": {
-    "import": "./index.js",
-    "default": "./index.cjs"
-  },
-  "scripts": {
-    "build": "ascjs index.js index.cjs && ascjs test.js test.cjs",
-    "lint": "standard",
-    "prepublishOnly": "npm run build",
-    "pretest": "npm run build",
-    "test": "node test.cjs"
-  },
-  "keywords": [
-    "pprof",
-    "encode",
-    "decode",
-    "profile"
-  ],
   "author": "Stephen Belanger <admin@stephenbelanger.com>",
   "license": "MIT",
-  "devDependencies": {
-    "ascjs": "^5.0.1",
-    "standard": "^17.0.0",
-    "tap": "^16.3.0"
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "types": "./dist/index.d.ts",
+    "require": "./dist/index.js",
+    "import": "./dist/index.mjs",
+    "default": "./dist/index.js"
   },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "lint": "eslint src",
+    "prepublishOnly": "yarn build",
+    "pretest": "yarn build",
+    "test": "node dist/index.test.js"
+  },
+  "homepage": "https://github.com/Qard/pprof-format#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Qard/pprof-format.git"
@@ -36,5 +28,18 @@
   "bugs": {
     "url": "https://github.com/Qard/pprof-format/issues"
   },
-  "homepage": "https://github.com/Qard/pprof-format#readme"
+  "keywords": [
+    "pprof",
+    "encode",
+    "decode",
+    "profile"
+  ],
+  "devDependencies": {
+    "@types/tap": "^15.0.7",
+    "@typescript-eslint/eslint-plugin": "^5.40.0",
+    "@typescript-eslint/parser": "^5.40.0",
+    "eslint": "^8.25.0",
+    "tap": "^16.3.0",
+    "typescript": "^4.8.4"
+  }
 }
