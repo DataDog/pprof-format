@@ -6,5 +6,5 @@ node_modules
 package-lock.json
 yarn.lock
 
-# Ignore CJS files
-*.cjs
+# Ignore build files
+dist

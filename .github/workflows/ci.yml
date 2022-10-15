@@ -22,5 +22,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - uses: actions/setup-node@v1
+      with:
+        node-version: 18
     - run: npm install
     - run: npm run lint
