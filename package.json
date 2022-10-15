@@ -1,6 +1,6 @@
 {
   "name": "pprof-format",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Pure JavaScript pprof encoder and decoder",
   "author": "Stephen Belanger <admin@stephenbelanger.com>",
   "license": "MIT",

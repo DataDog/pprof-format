@@ -12,6 +12,10 @@ const toUtf8 = typeof Buffer === 'undefined'
 
 type Numeric = number | bigint
 
+type DeepPartial<T> = {
+  [P in keyof T]?: DeepPartial<T[P]>
+}
+
 function countNumberBytes(buffer: Uint8Array): number {
   if (!buffer.length) return 0
   let i = 0
@@ -244,8 +248,8 @@ export class StringTable extends Array {
 
 function decode<T>(
   buffer: Uint8Array,
-  decoder: (data: Partial<T>, field: number, value: Uint8Array) => void
-): Partial<T> {
+  decoder: (data: DeepPartial<T>, field: number, value: Uint8Array) => void
+): DeepPartial<T> {
   const data = {}
   let index = 0
 
@@ -267,7 +271,7 @@ export class ValueType {
   type: Numeric
   unit: Numeric
 
-  constructor(data: Partial<ValueType>) {
+  constructor(data: DeepPartial<ValueType>) {
     this.type = data.type || 0
     this.unit = data.unit || 0
   }
@@ -302,7 +306,7 @@ export class ValueType {
     return buffer
   }
 
-  static decodeValue(data: Partial<ValueType>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: DeepPartial<ValueType>, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.type = decodeNumber(buffer)
@@ -324,7 +328,7 @@ export class Label {
   num: Numeric
   numUnit: Numeric
 
-  constructor(data: Partial<Label>) {
+  constructor(data: DeepPartial<Label>) {
     this.key = data.key || 0
     this.str = data.str || 0
     this.num = data.num || 0
@@ -369,7 +373,7 @@ export class Label {
     return buffer
   }
 
-  static decodeValue(data: Partial<Label>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: DeepPartial<Label>, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.key = decodeNumber(buffer)
@@ -396,7 +400,7 @@ export class Sample {
   value: Array<Numeric>
   label: Array<Label>
 
-  constructor(data: Partial<Sample>) {
+  constructor(data: DeepPartial<Sample>) {
     this.locationId = data.locationId || []
     this.value = data.value || []
     this.label = (data.label || []).map(l => new Label(l))
@@ -441,7 +445,7 @@ export class Sample {
     return buffer
   }
 
-  static decodeValue(data: Partial<Sample>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: DeepPartial<Sample>, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.locationId = decodeNumbers(buffer)
@@ -472,7 +476,7 @@ export class Mapping {
   hasLineNumbers: boolean
   hasInlineFrames: boolean
 
-  constructor(data: Partial<Mapping>) {
+  constructor(data: DeepPartial<Mapping>) {
     this.id = data.id || 0
     this.memoryStart = data.memoryStart || 0
     this.memoryLimit = data.memoryLimit || 0
@@ -549,7 +553,7 @@ export class Mapping {
     return buffer
   }
 
-  static decodeValue(data: Partial<Mapping>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: DeepPartial<Mapping>, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.id = decodeNumber(buffer)
@@ -593,7 +597,7 @@ export class Line {
   functionId: Numeric
   line: Numeric
 
-  constructor(data: Partial<Line>) {
+  constructor(data: DeepPartial<Line>) {
     this.functionId = data.functionId || 0
     this.line = data.line || 0
   }
@@ -624,7 +628,7 @@ export class Line {
     return buffer
   }
 
-  static decodeValue(data: Partial<Line>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: DeepPartial<Line>, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.functionId = decodeNumber(buffer)
@@ -647,7 +651,7 @@ export class Location {
   line: Array<Line>
   isFolded: boolean
 
-  constructor(data: Partial<Location>) {
+  constructor(data: DeepPartial<Location>) {
     this.id = data.id || 0
     this.mappingId = data.mappingId || 0
     this.address = data.address || 0
@@ -696,7 +700,7 @@ export class Location {
     return buffer
   }
 
-  static decodeValue(data: Partial<Location>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: DeepPartial<Location>, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.id = decodeNumber(buffer)
@@ -728,7 +732,7 @@ export class Function {
   filename: Numeric
   startLine: Numeric
 
-  constructor(data: Partial<Function>) {
+  constructor(data: DeepPartial<Function>) {
     this.id = data.id || 0
     this.name = data.name || 0
     this.systemName = data.systemName || 0
@@ -776,7 +780,7 @@ export class Function {
     return buffer
   }
 
-  static decodeValue(data: Partial<Function>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: DeepPartial<Function>, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.id = decodeNumber(buffer)
@@ -817,13 +821,13 @@ export class Profile {
   comment: Array<Numeric>
   defaultSampleType: Numeric
 
-  constructor(data: Partial<Profile> = {}) {
+  constructor(data: DeepPartial<Profile> = {}) {
     this.sampleType = (data.sampleType || []).map(v => new ValueType(v))
     this.sample = (data.sample || []).map(v => new Sample(v))
     this.mapping = (data.mapping || []).map(v => new Mapping(v))
     this.location = (data.location || []).map(v => new Location(v))
     this.function = (data.function || []).map(v => new Function(v))
-    this.stringTable = StringTable.from(data.stringTable || [])
+    this.stringTable = StringTable.from((data.stringTable as StringTable) || [])
     this.dropFrames = data.dropFrames || 0
     this.keepFrames = data.keepFrames || 0
     this.timeNanos = data.timeNanos || 0
@@ -938,7 +942,7 @@ export class Profile {
     return buffer
   }
 
-  static decodeValue(data: Partial<Profile>, field: number, buffer: Uint8Array) {
+  static decodeValue(data: DeepPartial<Profile>, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
         data.sampleType = push(ValueType.decode(buffer), data.sampleType)
@@ -957,7 +961,7 @@ export class Profile {
         break
       case 6: {
         const string = new TextDecoder().decode(buffer)
-        data.stringTable = StringTable.from(push(string, data.stringTable))
+        data.stringTable = StringTable.from(push(string, data.stringTable as StringTable))
         break
       }
       case 7:
