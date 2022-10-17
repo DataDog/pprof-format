@@ -124,7 +124,8 @@ function push<T>(value: T, list?: Array<T>): Array<T> {
   return Array.isArray(list) ? list.concat(value) : [value]
 }
 
-function measureNumber(number: Numeric) {
+function measureNumber(number: Numeric): number {
+  if (number === 0 || number === 0n) return 0
   const [hi, lo] = long(number)
 
   const a = lo
@@ -151,8 +152,9 @@ function measureNumber(number: Numeric) {
 }
 
 function measureValue<T>(value: T): number {
+  if (typeof value === 'undefined') return 0
   if (typeof value === 'number' || typeof value === 'bigint') {
-    return measureNumber(value)
+    return measureNumber(value) || 1
   }
   return (value as Array<T>).length
 }
@@ -165,7 +167,39 @@ function measureArray<T>(list: Array<T>): number {
   return size
 }
 
+function measureNumberField(number: Numeric): number {
+  const length = measureNumber(number)
+  return length ? 1 + length : 0
+}
+
+function measureNumberArrayField(values: Numeric[]): number {
+  let total = 0
+  for (const value of values) {
+    // Arrays should always include zeros to keep positions consistent
+    total += measureNumber(value) || 1
+  }
+  return total ? 2 + total : 0
+}
+
+function measureLengthDelimField<T>(value: T): number {
+  const length = measureValue(value)
+  return length ? 2 + length : 0
+}
+
+function measureLengthDelimArrayField<T>(values: T[]): number {
+  let total = 0
+  for (const value of values) {
+    total += measureLengthDelimField(value)
+  }
+  return total
+}
+
 function encodeNumber(buffer: Uint8Array, i: number, number: Numeric): number {
+  if (number === 0 || number === 0n) {
+    buffer[i++] = 0
+    return i
+  }
+
   let [hi, lo] = long(number)
 
   while (hi) {
@@ -282,10 +316,10 @@ export class ValueType {
   }
 
   get length() {
-    let size = 0
-    if (this.type) size += 1 + measureNumber(this.type)
-    if (this.unit) size += 1 + measureNumber(this.unit)
-    return size
+    let total = 0
+    total += measureNumberField(this.type)
+    total += measureNumberField(this.unit)
+    return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
@@ -345,10 +379,10 @@ export class Label {
 
   get length() {
     let total = 0
-    if (this.key) total += 1 + measureNumber(this.key)
-    if (this.str) total += 1 + measureNumber(this.str)
-    if (this.num) total += 1 + measureNumber(this.num)
-    if (this.numUnit) total += 1 + measureNumber(this.numUnit)
+    total += measureNumberField(this.key)
+    total += measureNumberField(this.str)
+    total += measureNumberField(this.num)
+    total += measureNumberField(this.numUnit)
     return total
   }
 
@@ -422,9 +456,9 @@ export class Sample {
 
   get length() {
     let total = 0
-    if (this.locationId.length) total += 2 + measureArray(this.locationId)
-    if (this.value.length) total += 2 + measureArray(this.value)
-    if (this.label.length) total += (2 * this.label.length) + measureArray(this.label)
+    total += measureNumberArrayField(this.locationId)
+    total += measureNumberArrayField(this.value)
+    total += measureLengthDelimArrayField(this.label)
     return total
   }
 
@@ -518,16 +552,16 @@ export class Mapping {
 
   get length() {
     let total = 0
-    if (this.id) total += 1 + measureNumber(this.id)
-    if (this.memoryStart) total += 1 + measureNumber(this.memoryStart)
-    if (this.memoryLimit) total += 1 + measureNumber(this.memoryLimit)
-    if (this.fileOffset) total += 1 + measureNumber(this.fileOffset)
-    if (this.filename) total += 1 + measureNumber(this.filename)
-    if (this.buildId) total += 1 + measureNumber(this.buildId)
-    if (this.hasFunctions) total += 1 + measureNumber(this.hasFunctions ? 1 : 0)
-    if (this.hasFilenames) total += 1 + measureNumber(this.hasFilenames ? 1 : 0)
-    if (this.hasLineNumbers) total += 1 + measureNumber(this.hasLineNumbers ? 1 : 0)
-    if (this.hasInlineFrames) total += 1 + measureNumber(this.hasInlineFrames ? 1 : 0)
+    total += measureNumberField(this.id)
+    total += measureNumberField(this.memoryStart)
+    total += measureNumberField(this.memoryLimit)
+    total += measureNumberField(this.fileOffset)
+    total += measureNumberField(this.filename)
+    total += measureNumberField(this.buildId)
+    total += measureNumberField(this.hasFunctions ? 1 : 0)
+    total += measureNumberField(this.hasFilenames ? 1 : 0)
+    total += measureNumberField(this.hasLineNumbers ? 1 : 0)
+    total += measureNumberField(this.hasInlineFrames ? 1 : 0)
     return total
   }
 
@@ -635,10 +669,10 @@ export class Line {
   }
 
   get length() {
-    let size = 0
-    if (this.functionId) size += 1 + measureNumber(this.functionId)
-    if (this.line) size += 1 + measureNumber(this.line)
-    return size
+    let total = 0
+    total += measureNumberField(this.functionId)
+    total += measureNumberField(this.line)
+    return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
@@ -701,11 +735,11 @@ export class Location {
 
   get length() {
     let total = 0
-    if (this.id) total += 1 + measureNumber(this.id)
-    if (this.mappingId) total += 1 + measureNumber(this.mappingId)
-    if (this.address) total += 1 + measureNumber(this.address)
-    if (this.line.length) total += (2 * this.line.length) + measureArray(this.line)
-    if (this.isFolded) total += 1 + measureNumber(this.isFolded ? 1 : 0)
+    total += measureNumberField(this.id)
+    total += measureNumberField(this.mappingId)
+    total += measureNumberField(this.address)
+    total += measureLengthDelimArrayField(this.line)
+    total += measureNumberField(this.isFolded ? 1 : 0)
     return total
   }
 
@@ -790,11 +824,11 @@ export class Function {
 
   get length() {
     let total = 0
-    if (this.id) total += 1 + measureNumber(this.id)
-    if (this.name) total += 1 + measureNumber(this.name)
-    if (this.systemName) total += 1 + measureNumber(this.systemName)
-    if (this.filename) total += 1 + measureNumber(this.filename)
-    if (this.startLine) total += 1 + measureNumber(this.startLine)
+    total += measureNumberField(this.id)
+    total += measureNumberField(this.name)
+    total += measureNumberField(this.systemName)
+    total += measureNumberField(this.filename)
+    total += measureNumberField(this.startLine)
     return total
   }
 
@@ -905,20 +939,20 @@ export class Profile {
 
   get length() {
     let total = 0
-    if (this.sampleType.length) total += (2 * this.sampleType.length) + measureArray(this.sampleType)
-    if (this.sample.length) total += (2 * this.sample.length) + measureArray(this.sample)
-    if (this.mapping.length) total += (2 * this.mapping.length) + measureArray(this.mapping)
-    if (this.location.length) total += (2 * this.location.length) + measureArray(this.location)
-    if (this.function.length) total += (2 * this.function.length) + measureArray(this.function)
-    if (this.stringTable.length > 1) total += this.stringTable.encodedLength
-    if (this.dropFrames) total += 1 + measureNumber(this.dropFrames)
-    if (this.keepFrames) total += 1 + measureNumber(this.keepFrames)
-    if (this.timeNanos) total += 1 + measureNumber(this.timeNanos)
-    if (this.durationNanos) total += 1 + measureNumber(this.durationNanos)
-    if (typeof this.periodType !== 'undefined') total += 2 + measureValue(this.periodType)
-    if (this.period) total += 1 + measureNumber(this.period)
-    if (this.comment.length) total += 2 + measureArray(this.comment)
-    if (this.defaultSampleType) total += 1 + measureNumber(this.defaultSampleType)
+    total += measureLengthDelimArrayField(this.sampleType)
+    total += measureLengthDelimArrayField(this.sample)
+    total += measureLengthDelimArrayField(this.mapping)
+    total += measureLengthDelimArrayField(this.location)
+    total += measureLengthDelimArrayField(this.function)
+    total += this.stringTable.encodedLength
+    total += measureNumberField(this.dropFrames)
+    total += measureNumberField(this.keepFrames)
+    total += measureNumberField(this.timeNanos)
+    total += measureNumberField(this.durationNanos)
+    total += measureLengthDelimField(this.periodType)
+    total += measureNumberField(this.period)
+    total += measureLengthDelimArrayField(this.comment)
+    total += measureNumberField(this.defaultSampleType)
     return total
   }
 
