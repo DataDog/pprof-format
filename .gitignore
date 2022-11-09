@@ -1,4 +1,5 @@
 # Ignore common dot-files
+.DS_Store
 .vscode
 
 # Ignore dependencies and lock files 
