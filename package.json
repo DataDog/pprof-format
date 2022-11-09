@@ -2,7 +2,7 @@
   "name": "pprof-format",
   "version": "2.0.4",
   "description": "Pure JavaScript pprof encoder and decoder",
-  "author": "Stephen Belanger <admin@stephenbelanger.com>",
+  "author": "Datadog Inc. <info@datadoghq.com>",
   "license": "MIT",
   "type": "commonjs",
   "main": "./dist/index.js",
@@ -20,13 +20,13 @@
     "pretest": "yarn build",
     "test": "node dist/index.test.js"
   },
-  "homepage": "https://github.com/Qard/pprof-format#readme",
+  "homepage": "https://github.com/DataDog/pprof-format#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Qard/pprof-format.git"
+    "url": "git+https://github.com/DataDog/pprof-format.git"
   },
   "bugs": {
-    "url": "https://github.com/Qard/pprof-format/issues"
+    "url": "https://github.com/DataDog/pprof-format/issues"
   },
   "keywords": [
     "pprof",
