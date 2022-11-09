@@ -226,11 +226,6 @@ export class StringTable extends Array {
   #encodings = new Map<string, Uint8Array>()
   #positions = new Map<string, number>()
 
-  constructor() {
-    super()
-    this.push('')
-  }
-
   static from(values: StringTable | Array<string>): StringTable {
     if (values instanceof StringTable) {
       return values
@@ -254,7 +249,7 @@ export class StringTable extends Array {
     return size
   }
 
-  encode(buffer: Uint8Array, offset: number): number {
+  _encodeToBuffer(buffer: Uint8Array, offset: number): number {
     for (const encoded of this.#encodings.values()) {
       buffer.set(encoded, offset)
       offset += encoded.length
@@ -262,9 +257,14 @@ export class StringTable extends Array {
     return offset
   }
 
+  encode(buffer = new Uint8Array(this.encodedLength)): Uint8Array {
+    this._encodeToBuffer(buffer, 0)
+    return buffer
+  }
+
   static _encodeString(string: string): Uint8Array {
     const stringBuffer = toUtf8(string)
-    const buffer = new Uint8Array(1 + stringBuffer.length + measureNumber(stringBuffer.length))
+    const buffer = new Uint8Array(1 + stringBuffer.length + (measureNumber(stringBuffer.length) || 1))
     let offset = 0
     buffer[offset++] = 50 // (6 << 3) + kTypeLengthDelim
     offset = encodeNumber(buffer, offset, stringBuffer.length)
@@ -273,7 +273,6 @@ export class StringTable extends Array {
   }
 
   dedup(string: string): number {
-    if (!string) return 0
     if (typeof string === 'number') return string
     if (!this.#positions.has(string)) {
       const pos = this.push(string) - 1
@@ -932,7 +931,7 @@ export class Profile {
     this.mapping = (data.mapping || []).map(v => new Mapping(v))
     this.location = (data.location || []).map(v => new Location(v))
     this.function = (data.function || []).map(v => new Function(v))
-    this.stringTable = StringTable.from(data.stringTable || [])
+    this.stringTable = StringTable.from(data.stringTable || [''])
     this.dropFrames = data.dropFrames || 0
     this.keepFrames = data.keepFrames || 0
     this.timeNanos = data.timeNanos || 0
@@ -993,7 +992,7 @@ export class Profile {
       offset = fun._encodeToBuffer(buffer, offset)
     }
 
-    offset = this.stringTable.encode(buffer, offset)
+    offset = this.stringTable._encodeToBuffer(buffer, offset)
 
     if (this.dropFrames) {
       buffer[offset++] = 56 // (7 << 3) + kTypeVarInt

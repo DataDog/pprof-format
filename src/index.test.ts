@@ -56,7 +56,11 @@ tap.Test.prototype.addAssert('encodes', 3, function (Type: any, data: Data, enco
   return this.test(message, (t: TestSuite) => {
     t.test('per-field validation', (t2: TestSuite) => {
       for (const { field, value } of encodings) {
-        const fun = new Type({ [field]: data[field] })
+        const fun = new Type({
+          // Hack to exclude stringTable data from any checks except for the string table itself
+          stringTable: new StringTable(),
+          [field]: data[field]
+        })
         const msg = `has expected encoding of ${field} field`
         t2.equal(bufToHex(fun.encode()), value, msg)
       }
@@ -101,7 +105,7 @@ tap.Test.prototype.addAssert('decodes', 3, function (Type: any, data: Data, enco
   })
 })
 
-const stringTable = new StringTable()
+const stringTable = StringTable.from([''])
 
 const functionData = {
   id: 123,
@@ -294,7 +298,7 @@ tap.test('Profile', (t: TestSuite) => {
 })
 
 function encodeStringTable(strings: StringTable) {
-  return strings.slice(1).map(s => {
+  return strings.map(s => {
     const buf = new TextEncoder().encode(s)
     return `32${hexNum(buf.length)}${bufToHex(buf)}`
   }).join('')
@@ -323,3 +327,17 @@ function hexToBuf(hex: string) {
 function bufToHex(buf: Uint8Array) {
   return Array.from(buf).map(hexNum).join('')
 }
+
+tap.test('StringTable', (t: TestSuite) => {
+  t.test('encodes correctly', (t: TestSuite) => {
+    const encodings = {
+      '': '3200',
+      'hello': '320568656c6c6f'
+    }
+    t.equal(bufToHex(StringTable.from(['']).encode()), encodings[''])
+    t.equal(bufToHex(StringTable.from(['', 'hello']).encode()), encodings[''] + encodings['hello'])
+    t.end()
+  })
+
+  t.end()
+})
