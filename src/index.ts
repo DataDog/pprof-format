@@ -55,7 +55,7 @@ function getValue(mode: number, buffer: Uint8Array) {
     case kTypeLengthDelim: {
       const offset = countNumberBytes(buffer)
       const size = decodeNumber(buffer)
-      return makeValue(buffer.slice(offset, Number(size) + 1), offset)
+      return makeValue(buffer.slice(offset, Number(size) + offset), offset)
     }
     default:
       throw new Error(`Unrecognized value type: ${mode}`)

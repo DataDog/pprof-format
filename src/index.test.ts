@@ -272,7 +272,7 @@ const profileData = {
   periodType: valueTypeData,
   period: 1234 / 2,
   comment: [
-    stringTable.dedup('some comment')
+    stringTable.dedup('some very very very very very very very very very very very very very very very very very very very very very very very very comment')
   ]
 }
 
@@ -300,19 +300,40 @@ tap.test('Profile', (t: TestSuite) => {
 function encodeStringTable(strings: StringTable) {
   return strings.map(s => {
     const buf = new TextEncoder().encode(s)
-    return `32${hexNum(buf.length)}${bufToHex(buf)}`
+    return `32${hexVarInt(buf.length)}${bufToHex(buf)}`
   }).join('')
 }
 
-function hexNum(num: number) {
-  let str = num.toString(16)
-  if (str.length % 2) str = '0' + str
+function hexNum(d: number) {
+  let hex = Number(d).toString(16);
+
+  if (hex.length == 1) {
+      hex = "0" + hex;
+  }
+
+  return hex;
+}
+
+function hexVarInt(num: number) {
+  let n = BigInt(num)
+  if (n < 0) {
+    // take two's complement to encode negative number
+    n = 2n ** 64n - n
+  }
+  let str = ''
+  const maxbits = 7n
+  const max = (1n << maxbits) - 1n
+  while (n > max) {
+    str += hexNum(Number((n & max) | (1n << maxbits)))
+    n >>=  maxbits
+  }
+  str += hexNum(Number(n))
   return str
 }
 
 function embeddedField(fieldBit: string, data: Encoding[]) {
   const encoded = fullEncoding(data)
-  const size = hexNum(encoded.length / 2)
+  const size = hexVarInt(encoded.length / 2)
   return [fieldBit, size, encoded].join('')
 }
 
