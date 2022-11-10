@@ -222,35 +222,29 @@ function encodeNumber(buffer: Uint8Array, i: number, number: Numeric): number {
   return i
 }
 
-export class StringTable extends Array {
-  #encodings = new Map<string, Uint8Array>()
+export const emptyTableToken = Symbol()
+
+export class StringTable {
+  strings = new Array<string>()
+  #encodings = new Array<Uint8Array>()
   #positions = new Map<string, number>()
 
-  static from(values: StringTable | Array<string>): StringTable {
-    if (values instanceof StringTable) {
-      return values
+  constructor(tok?: typeof emptyTableToken) {
+    if (tok !== emptyTableToken) {
+      this.dedup('')
     }
-
-    // Need to copy over manually to ensure the lookup map is correct
-    const table = new StringTable()
-    for (const value of values) {
-      table.#positions.set(value, table.push(value) - 1)
-      table.#encodings.set(value, StringTable._encodeString(value))
-    }
-
-    return table
   }
 
   get encodedLength(): number {
     let size = 0
-    for (const encoded of this.#encodings.values()) {
+    for (const encoded of this.#encodings) {
       size += encoded.length
     }
     return size
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset: number): number {
-    for (const encoded of this.#encodings.values()) {
+    for (const encoded of this.#encodings) {
       buffer.set(encoded, offset)
       offset += encoded.length
     }
@@ -262,26 +256,37 @@ export class StringTable extends Array {
     return buffer
   }
 
-  static _encodeString(string: string): Uint8Array {
-    const stringBuffer = toUtf8(string)
+  static _encodeStringFromUtf8(stringBuffer: Uint8Array | Buffer): Uint8Array {
     const buffer = new Uint8Array(1 + stringBuffer.length + (measureNumber(stringBuffer.length) || 1))
     let offset = 0
     buffer[offset++] = 50 // (6 << 3) + kTypeLengthDelim
     offset = encodeNumber(buffer, offset, stringBuffer.length)
-    buffer.set(stringBuffer, offset++)
+    if (stringBuffer.length > 0) {
+      buffer.set(stringBuffer, offset++)
+    }
     return buffer
+  }
+
+  static _encodeString(string: string): Uint8Array {
+    return StringTable._encodeStringFromUtf8(toUtf8(string))
   }
 
   dedup(string: string): number {
     if (typeof string === 'number') return string
     if (!this.#positions.has(string)) {
-      const pos = this.push(string) - 1
+      const pos = this.strings.push(string) - 1
       this.#positions.set(string, pos)
 
       // Encode strings on insertion
-      this.#encodings.set(string, StringTable._encodeString(string))
+      this.#encodings.push(StringTable._encodeString(string))
     }
     return this.#positions.get(string)
+  }
+
+  _decodeString(buffer: Uint8Array) {
+    const string = new TextDecoder().decode(buffer)
+    this.#positions.set(string, this.strings.push(string) - 1)
+    this.#encodings.push(StringTable._encodeStringFromUtf8(buffer))
   }
 }
 
@@ -898,7 +903,7 @@ export type ProfileInput = {
   mapping?: Array<MappingInput>
   location?: Array<LocationInput>
   function?: Array<FunctionInput>
-  stringTable?: StringTable | string[]
+  stringTable?: StringTable
   dropFrames?: Numeric
   keepFrames?: Numeric
   timeNanos?: Numeric
@@ -931,7 +936,7 @@ export class Profile {
     this.mapping = (data.mapping || []).map(v => new Mapping(v))
     this.location = (data.location || []).map(v => new Location(v))
     this.function = (data.function || []).map(v => new Function(v))
-    this.stringTable = StringTable.from(data.stringTable || [''])
+    this.stringTable = data.stringTable || new StringTable()
     this.dropFrames = data.dropFrames || 0
     this.keepFrames = data.keepFrames || 0
     this.timeNanos = data.timeNanos || 0
@@ -1064,8 +1069,10 @@ export class Profile {
         data.function = push(Function.decode(buffer), data.function)
         break
       case 6: {
-        const string = new TextDecoder().decode(buffer)
-        data.stringTable = StringTable.from(push(string, data.stringTable as StringTable))
+        if (data.stringTable === undefined) {
+          data.stringTable = new StringTable(emptyTableToken)
+        }
+        data.stringTable._decodeString(buffer)
         break
       }
       case 7:

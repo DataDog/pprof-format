@@ -16,7 +16,8 @@ import {
   Profile,
   Sample,
   ValueType,
-  StringTable
+  StringTable,
+  emptyTableToken
 } from './index.js'
 
 type Data = {
@@ -58,7 +59,7 @@ tap.Test.prototype.addAssert('encodes', 3, function (Type: any, data: Data, enco
       for (const { field, value } of encodings) {
         const fun = new Type({
           // Hack to exclude stringTable data from any checks except for the string table itself
-          stringTable: new StringTable(),
+          stringTable: new StringTable(emptyTableToken),
           [field]: data[field]
         })
         const msg = `has expected encoding of ${field} field`
@@ -105,7 +106,7 @@ tap.Test.prototype.addAssert('decodes', 3, function (Type: any, data: Data, enco
   })
 })
 
-const stringTable = StringTable.from([''])
+const stringTable = new StringTable()
 
 const functionData = {
   id: 123,
@@ -298,7 +299,7 @@ tap.test('Profile', (t: TestSuite) => {
 })
 
 function encodeStringTable(strings: StringTable) {
-  return strings.map(s => {
+  return strings.strings.map(s => {
     const buf = new TextEncoder().encode(s)
     return `32${hexVarInt(buf.length)}${bufToHex(buf)}`
   }).join('')
@@ -308,7 +309,7 @@ function hexNum(d: number) {
   let hex = Number(d).toString(16);
 
   if (hex.length == 1) {
-      hex = "0" + hex;
+    hex = "0" + hex;
   }
 
   return hex;
@@ -325,7 +326,7 @@ function hexVarInt(num: number) {
   const max = (1n << maxbits) - 1n
   while (n > max) {
     str += hexNum(Number((n & max) | (1n << maxbits)))
-    n >>=  maxbits
+    n >>= maxbits
   }
   str += hexNum(Number(n))
   return str
@@ -355,8 +356,10 @@ tap.test('StringTable', (t: TestSuite) => {
       '': '3200',
       'hello': '320568656c6c6f'
     }
-    t.equal(bufToHex(StringTable.from(['']).encode()), encodings[''])
-    t.equal(bufToHex(StringTable.from(['', 'hello']).encode()), encodings[''] + encodings['hello'])
+    const table = new StringTable()
+    t.equal(bufToHex(table.encode()), encodings[''])
+    table.dedup('hello')
+    t.equal(bufToHex(table.encode()), encodings[''] + encodings['hello'])
     t.end()
   })
 
