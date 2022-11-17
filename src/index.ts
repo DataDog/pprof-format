@@ -956,7 +956,7 @@ export class Profile {
     total += measureNumberField(this.durationNanos)
     total += measureLengthDelimField(this.periodType)
     total += measureNumberField(this.period)
-    total += measureLengthDelimArrayField(this.comment)
+    total += measureNumberArrayField(this.comment)
     total += measureNumberField(this.defaultSampleType)
     return total
   }
@@ -1087,7 +1087,7 @@ export class Profile {
         data.period = decodeNumber(buffer)
         break
       case 13:
-        data.comment = push(decodeNumber(buffer), data.comment)
+        data.comment = decodeNumbers(buffer)
         break
       case 14:
         data.defaultSampleType = decodeNumber(buffer)
