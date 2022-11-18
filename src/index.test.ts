@@ -272,7 +272,8 @@ const profileData = {
   periodType: valueTypeData,
   period: 1234 / 2,
   comment: [
-    stringTable.dedup('some very very very very very very very very very very very very very very very very very very very very very very very very comment')
+    stringTable.dedup('some very very very very very very very very very very very very very very very very very very very very very very very very comment'),
+    stringTable.dedup('another comment')
   ]
 }
 
@@ -287,7 +288,7 @@ const profileEncodings = [
   { field: 'durationNanos', value: '50d209' },
   { field: 'periodType', value: embeddedField('5a', valueTypeEncodings) },
   { field: 'period', value: '60e904' },
-  { field: 'comment', value: '6a010b' },
+  { field: 'comment', value: '6a020b0c' },
 ]
 
 tap.test('Profile', (t: TestSuite) => {
@@ -308,7 +309,7 @@ function hexNum(d: number) {
   let hex = Number(d).toString(16);
 
   if (hex.length == 1) {
-      hex = "0" + hex;
+    hex = "0" + hex;
   }
 
   return hex;
@@ -325,7 +326,7 @@ function hexVarInt(num: number) {
   const max = (1n << maxbits) - 1n
   while (n > max) {
     str += hexNum(Number((n & max) | (1n << maxbits)))
-    n >>=  maxbits
+    n >>= maxbits
   }
   str += hexNum(Number(n))
   return str
