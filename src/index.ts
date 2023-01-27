@@ -184,12 +184,16 @@ function measureNumberArrayField(values: Numeric[]): number {
     // Arrays should always include zeros to keep positions consistent
     total += measureNumber(value) || 1
   }
-  return total ? 2 + total : 0
+  // Packed arrays are encoded as Tag,Len,ConcatenatedElements
+  // Tag is only one byte because field number is always < 16 in pprof
+  return total ? 1 + measureNumber(total) + total : 0
 }
 
 function measureLengthDelimField<T>(value: T): number {
   const length = measureValue(value)
-  return length ? 2 + length : 0
+  // Length delimited records / submessages are encoded as Tag,Len,EncodedRecord
+  // Tag is only one byte because field number is always < 16 in pprof
+  return length ? 1 + measureNumber(length) + length : 0
 }
 
 function measureLengthDelimArrayField<T>(values: T[]): number {

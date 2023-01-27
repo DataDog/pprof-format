@@ -227,13 +227,13 @@ tap.test('Mapping', (t: TestSuite) => {
 
 const sampleData = {
   locationId: [1, 2, 3],
-  value: [4, 5, 0, 6],
+  value: [...Array(180).keys()],
   label: [labelData]
 }
 
 const sampleEncodings = [
   { field: 'locationId', value: '0a03010203' },
-  { field: 'value', value: '120404050006' },
+  { field: 'value', value: embeddedField('12', sampleData.value.map(x => ({field: '', value: hexVarInt(x)}))) },
   { field: 'label', value: embeddedField('1a', labelEncodings) },
 ]
 
