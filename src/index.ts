@@ -127,7 +127,11 @@ function decodeNumbers(buffer: Uint8Array): Array<Numeric> {
 }
 
 function push<T>(value: T, list?: Array<T>): Array<T> {
-  return Array.isArray(list) ? list.concat(value) : [value]
+  if (list == null) {
+    return [value]
+  }
+  list.push(value)
+  return list
 }
 
 function measureNumber(number: Numeric): number {
