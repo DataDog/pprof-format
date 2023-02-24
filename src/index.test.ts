@@ -6,6 +6,11 @@
 
 import tap from 'tap'
 import type Tap from 'tap'
+import {perftools} from '../testing/proto/profile';
+import { gunzipSync } from 'zlib';
+import * as fs from 'fs';
+
+const {decode, toObject} = perftools.profiles.Profile
 
 import {
   Function,
@@ -361,6 +366,29 @@ tap.test('StringTable', (t: TestSuite) => {
     t.equal(bufToHex(table.encode()), encodings[''])
     table.dedup('hello')
     t.equal(bufToHex(table.encode()), encodings[''] + encodings['hello'])
+    t.end()
+  })
+
+  t.end()
+})
+
+function profileToObject(profile: any): Object {
+  profile.stringTable = profile.stringTable.strings
+  return profile
+}
+
+tap.test('Protobufjs compat', (t: TestSuite) => {
+  t.test('encodes correctly', (t: TestSuite) => {
+    const profile = new Profile(profileData)
+    const encodedProfile = profile.encode()
+    const decodedProfile = decode(encodedProfile)
+    t.same(profileToObject(profile), toObject(decodedProfile, {longs: String, defaults: true}))
+    t.end()
+  })
+
+  t.test('decodes correctly', (t: TestSuite) => {
+    const buf = gunzipSync(fs.readFileSync('./testing/test.pprof'))
+    t.same(profileToObject(Profile.decode(buf)), toObject(decode(buf), {longs: String, defaults: true}))
     t.end()
   })
 
