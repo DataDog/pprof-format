@@ -18,7 +18,8 @@
     "lint": "eslint src",
     "prepublishOnly": "yarn build",
     "pretest": "yarn build",
-    "test": "node dist/index.test.js"
+    "test": "node dist/index.test.js",
+    "proto": "mkdir -p proto && pbjs -t static-module -w commonjs -o testing/proto/profile.js testing/proto/profile.proto && pbts -o testing/proto/profile.d.ts testing/proto/profile.js"
   },
   "homepage": "https://github.com/DataDog/pprof-format#readme",
   "repository": {
@@ -39,6 +40,8 @@
     "@typescript-eslint/eslint-plugin": "^5.40.0",
     "@typescript-eslint/parser": "^5.40.0",
     "eslint": "^8.25.0",
+    "protobufjs": "^7.2.2",
+    "protobufjs-cli": "^1.1.1",
     "tap": "^16.3.0",
     "typescript": "^4.8.4"
   }
