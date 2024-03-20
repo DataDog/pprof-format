@@ -1,6 +1,6 @@
 /**
  * Unless explicitly stated otherwise all files in this repository are licensed under the MIT License.
- * 
+ *
  * This product includes software developed at Datadog (https://www.datadoghq.com/  Copyright 2022 Datadog, Inc.
  */
 
@@ -974,39 +974,52 @@ export class Profile {
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
+  _encodeSampleTypesToBuffer(buffer: Uint8Array, offset = 0): number {
     for (const sampleType of this.sampleType) {
       buffer[offset++] = 10 // (1 << 3) + kTypeLengthDelim
       offset = encodeNumber(buffer, offset, sampleType.length)
       offset = sampleType._encodeToBuffer(buffer, offset)
     }
+    return offset
+  }
 
+  _encodeSamplesToBuffer(buffer: Uint8Array, offset = 0): number {
     for (const sample of this.sample) {
       buffer[offset++] = 18 // (2 << 3) + kTypeLengthDelim
       offset = encodeNumber(buffer, offset, sample.length)
       offset = sample._encodeToBuffer(buffer, offset)
     }
+    return offset
+  }
 
+  _encodeMappingsToBuffer(buffer: Uint8Array, offset = 0): number {
     for (const mapping of this.mapping) {
       buffer[offset++] = 26 // (3 << 3) + kTypeLengthDelim
       offset = encodeNumber(buffer, offset, mapping.length)
       offset = mapping._encodeToBuffer(buffer, offset)
     }
+    return offset
+  }
 
+  _encodeLocationsToBuffer(buffer: Uint8Array, offset = 0): number {
     for (const location of this.location) {
       buffer[offset++] = 34 // (4 << 3) + kTypeLengthDelim
       offset = encodeNumber(buffer, offset, location.length)
       offset = location._encodeToBuffer(buffer, offset)
     }
+    return offset
+  }
 
+  _encodeFunctionsToBuffer(buffer: Uint8Array, offset = 0): number {
     for (const fun of this.function) {
       buffer[offset++] = 42 // (5 << 3) + kTypeLengthDelim
       offset = encodeNumber(buffer, offset, fun.length)
       offset = fun._encodeToBuffer(buffer, offset)
     }
+    return offset
+  }
 
-    offset = this.stringTable._encodeToBuffer(buffer, offset)
-
+  _encodeBasicValuesToBuffer(buffer: Uint8Array, offset = 0): number {
     if (this.dropFrames) {
       buffer[offset++] = 56 // (7 << 3) + kTypeVarInt
       offset = encodeNumber(buffer, offset, this.dropFrames)
@@ -1054,8 +1067,47 @@ export class Profile {
     return offset
   }
 
+  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
+    offset = this._encodeSampleTypesToBuffer(buffer, offset)
+    offset = this._encodeSamplesToBuffer(buffer, offset)
+    offset = this._encodeMappingsToBuffer(buffer, offset)
+    offset = this._encodeLocationsToBuffer(buffer, offset)
+    offset = this._encodeFunctionsToBuffer(buffer, offset)
+    offset = this.stringTable._encodeToBuffer(buffer, offset)
+    offset = this._encodeBasicValuesToBuffer(buffer, offset)
+    return offset
+  }
+
+  async _encodeToBufferAsync(buffer: Uint8Array, offset = 0): Promise<number> {
+    offset = this._encodeSampleTypesToBuffer(buffer, offset)
+    await new Promise(setImmediate)
+
+    offset = this._encodeSamplesToBuffer(buffer, offset)
+    await new Promise(setImmediate)
+
+    offset = this._encodeMappingsToBuffer(buffer, offset)
+    await new Promise(setImmediate)
+
+    offset = this._encodeLocationsToBuffer(buffer, offset)
+    await new Promise(setImmediate)
+
+    offset = this._encodeFunctionsToBuffer(buffer, offset)
+    await new Promise(setImmediate)
+
+    offset = this.stringTable._encodeToBuffer(buffer, offset)
+    await new Promise(setImmediate)
+
+    offset = this._encodeBasicValuesToBuffer(buffer, offset)
+    return offset
+  }
+
   encode(buffer = new Uint8Array(this.length)): Uint8Array {
     this._encodeToBuffer(buffer, 0)
+    return buffer
+  }
+
+  async encodeAsync(buffer = new Uint8Array(this.length)): Promise<Uint8Array> {
+    await this._encodeToBufferAsync(buffer, 0)
     return buffer
   }
 
