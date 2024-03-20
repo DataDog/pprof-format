@@ -1,6 +1,6 @@
 /**
  * Unless explicitly stated otherwise all files in this repository are licensed under the MIT License.
- * 
+ *
  * This product includes software developed at Datadog (https://www.datadoghq.com/  Copyright 2022 Datadog, Inc.
  */
 
@@ -300,6 +300,36 @@ const profileEncodings = [
 tap.test('Profile', (t: TestSuite) => {
   t.constructs(Profile, profileData, profileEncodings)
   t.encodes(Profile, profileData, profileEncodings)
+
+  // Profiles additionally can be encoded asynchronously to break up
+  // encoding into smaller chunks to have less latency impact.
+  t.test('async encoding', (t: TestSuite) => {
+    t.test('per-field validation', async (t2: TestSuite) => {
+      for (const { field, value } of profileEncodings) {
+        const fun = new Profile({
+          // Hack to exclude stringTable data from any checks except for the string table itself
+          stringTable: new StringTable(emptyTableToken),
+          [field]: (profileData as Data)[field]
+        })
+        const msg = `has expected encoding of ${field} field`
+        t2.equal(bufToHex(await fun.encodeAsync()), value, msg)
+      }
+      t2.end()
+    })
+
+    t.test('full object validation', async (t2: TestSuite) => {
+      const fun = new Profile(profileData)
+      t2.equal(
+        bufToHex(await fun.encodeAsync()),
+        fullEncoding(profileEncodings),
+        'has expected encoding of full object'
+      )
+      t2.end()
+    })
+
+    t.end()
+  })
+
   t.decodes(Profile, profileData, profileEncodings)
   t.end()
 })
