@@ -1,8 +1,9 @@
 # Ignore common dot-files
 .DS_Store
 .vscode
+.tap
 
-# Ignore dependencies and lock files 
+# Ignore dependencies and lock files
 node_modules
 package-lock.json
 yarn.lock

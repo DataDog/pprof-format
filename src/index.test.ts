@@ -5,12 +5,13 @@
  */
 
 import tap from 'tap'
-import type Tap from 'tap'
-import {perftools} from '../testing/proto/profile';
-import { gunzipSync } from 'zlib';
-import * as fs from 'fs';
+import type { Test } from 'tap'
+import { gunzipSync } from 'zlib'
+import * as fs from 'fs'
 
-const {decode, toObject} = perftools.profiles.Profile
+import proto from '../testing/proto/profile.js'
+
+const {decode, toObject} = proto.perftools.profiles.Profile
 
 import {
   Function,
@@ -34,81 +35,62 @@ type Encoding = {
   value: string
 }
 
-interface TestSuite extends Tap.Test {
-  constructs(Type: any, data: Data, encodings: Encoding[], message?: string): void
-  encodes(Type: any, data: Data, encodings: Encoding[], message?: string): void
-  decodes(Type: any, data: Data, encodings: Encoding[], message?: string): void
-}
-
-tap.Test.prototype.addAssert('constructs', 3, function (Type: any, data: Data, encodings: Encoding[], message: string) {
-  message = message || 'construction'
-
-  return this.test(message, (t: TestSuite) => {
-    const value = new Type(data)
-    for (const { field } of encodings) {
-      if (typeof data[field] === 'object') {
-        t.has(value[field], data[field], `has given ${field}`)
-      } else {
-        t.equal(value[field], data[field], `has given ${field}`)
+const plugin = (t: Test) => ({
+  constructs(Type: any, data: Data, encodings: Encoding[], message = 'construction') {
+    return t.test(message, async (t: Test) => {
+      const value = new Type(data)
+      for (const { field } of encodings) {
+        if (typeof data[field] === 'object') {
+          t.has(value[field], data[field], `has given ${field}`)
+        } else {
+          t.equal(value[field], data[field], `has given ${field}`)
+        }
       }
-    }
-    t.end()
-  })
-})
-
-tap.Test.prototype.addAssert('encodes', 3, function (Type: any, data: Data, encodings: Encoding[], message: string) {
-  message = message || 'encoding'
-
-  return this.test(message, (t: TestSuite) => {
-    t.test('per-field validation', (t2: TestSuite) => {
-      for (const { field, value } of encodings) {
-        const fun = new Type({
-          // Hack to exclude stringTable data from any checks except for the string table itself
-          stringTable: new StringTable(emptyTableToken),
-          [field]: data[field]
-        })
-        const msg = `has expected encoding of ${field} field`
-        t2.equal(bufToHex(fun.encode()), value, msg)
-      }
-      t2.end()
     })
+  },
 
-    t.test('full object validation', (t2: TestSuite) => {
-      const fun = new Type(data)
-      t2.equal(
-        bufToHex(fun.encode()),
-        fullEncoding(encodings),
-        'has expected encoding of full object'
-      )
-      t2.end()
+  encodes(Type: any, data: Data, encodings: Encoding[], message = 'encoding') {
+    return t.test(message, async (t: Test) => {
+      await t.test('per-field validation', async (t2: Test) => {
+        for (const { field, value } of encodings) {
+          const fun = new Type({
+            // Hack to exclude stringTable data from any checks except for the string table itself
+            stringTable: new StringTable(emptyTableToken),
+            [field]: data[field]
+          })
+          const msg = `has expected encoding of ${field} field`
+          t2.equal(bufToHex(fun.encode()), value, msg)
+        }
+      })
+
+      await t.test('full object validation', async (t2: Test) => {
+        const fun = new Type(data)
+        t2.equal(
+          bufToHex(fun.encode()),
+          fullEncoding(encodings),
+          'has expected encoding of full object'
+        )
+      })
     })
+  },
 
-    t.end()
-  })
-})
+  decodes(Type: any, data: Data, encodings: Encoding[], message = 'decoding') {
+    return t.test(message, async (t: Test) => {
+      await t.test('per-field validation', async (t2: Test) => {
+        for (const { field, value } of encodings) {
+          if (!value) continue
+          const fun = Type.decode(hexToBuf(value))
+          const msg = `has expected decoding of ${field} field`
+          t2.has(fun, { [field]: data[field] }, msg)
+        }
+      })
 
-tap.Test.prototype.addAssert('decodes', 3, function (Type: any, data: Data, encodings: Encoding[], message: string) {
-  message = message || 'decoding'
-
-  return this.test(message, (t: TestSuite) => {
-    t.test('per-field validation', (t2: TestSuite) => {
-      for (const { field, value } of encodings) {
-        if (!value) continue
-        const fun = Type.decode(hexToBuf(value))
-        const msg = `has expected decoding of ${field} field`
-        t2.has(fun, { [field]: data[field] }, msg)
-      }
-      t2.end()
+      await t.test('full object validation', async (t2: Test) => {
+        const fun = Type.decode(hexToBuf(fullEncoding(encodings)))
+        t2.has(fun, data, 'has expected encoding of full object')
+      })
     })
-
-    t.test('full object validation', (t2: TestSuite) => {
-      const fun = Type.decode(hexToBuf(fullEncoding(encodings)))
-      t2.has(fun, data, 'has expected encoding of full object')
-      t2.end()
-    })
-
-    t.end()
-  })
+  }
 })
 
 const stringTable = new StringTable()
@@ -129,11 +111,11 @@ const functionEncodings = [
   { field: 'startLine', value: '289506' }
 ]
 
-tap.test('Function', (t: TestSuite) => {
-  t.constructs(Function, functionData, functionEncodings)
-  t.encodes(Function, functionData, functionEncodings)
-  t.decodes(Function, functionData, functionEncodings)
-  t.end()
+tap.test('Function', async (t: Test) => {
+  const extended = t.applyPlugin(plugin) as Test & ReturnType<typeof plugin>
+  await extended.constructs(Function, functionData, functionEncodings)
+  await extended.encodes(Function, functionData, functionEncodings)
+  await extended.decodes(Function, functionData, functionEncodings)
 })
 
 const labelData = {
@@ -150,11 +132,11 @@ const labelEncodings = [
   { field: 'numUnit', value: '2006' }
 ]
 
-tap.test('Label', (t: TestSuite) => {
-  t.constructs(Label, labelData, labelEncodings)
-  t.encodes(Label, labelData, labelEncodings)
-  t.decodes(Label, labelData, labelEncodings)
-  t.end()
+tap.test('Label', async (t: Test) => {
+  const extended = t.applyPlugin(plugin) as Test & ReturnType<typeof plugin>
+  await extended.constructs(Label, labelData, labelEncodings)
+  await extended.encodes(Label, labelData, labelEncodings)
+  await extended.decodes(Label, labelData, labelEncodings)
 })
 
 const lineData = {
@@ -167,11 +149,11 @@ const lineEncodings = [
   { field: 'line', value: '10ae2c' },
 ]
 
-tap.test('Line', (t: TestSuite) => {
-  t.constructs(Line, lineData, lineEncodings)
-  t.encodes(Line, lineData, lineEncodings)
-  t.decodes(Line, lineData, lineEncodings)
-  t.end()
+tap.test('Line', async (t: Test) => {
+  const extended = t.applyPlugin(plugin) as Test & ReturnType<typeof plugin>
+  await extended.constructs(Line, lineData, lineEncodings)
+  await extended.encodes(Line, lineData, lineEncodings)
+  await extended.decodes(Line, lineData, lineEncodings)
 })
 
 const locationData = {
@@ -190,11 +172,11 @@ const locationEncodings = [
   { field: 'isFolded', value: '2801' },
 ]
 
-tap.test('Location', (t: TestSuite) => {
-  t.constructs(Location, locationData, locationEncodings)
-  t.encodes(Location, locationData, locationEncodings)
-  t.decodes(Location, locationData, locationEncodings)
-  t.end()
+tap.test('Location', async (t: Test) => {
+  const extended = t.applyPlugin(plugin) as Test & ReturnType<typeof plugin>
+  await extended.constructs(Location, locationData, locationEncodings)
+  await extended.encodes(Location, locationData, locationEncodings)
+  await extended.decodes(Location, locationData, locationEncodings)
 })
 
 const mappingData = {
@@ -223,11 +205,11 @@ const mappingEncodings = [
   { field: 'hasInlineFrames', value: '5001' },
 ]
 
-tap.test('Mapping', (t: TestSuite) => {
-  t.constructs(Mapping, mappingData, mappingEncodings)
-  t.encodes(Mapping, mappingData, mappingEncodings)
-  t.decodes(Mapping, mappingData, mappingEncodings)
-  t.end()
+tap.test('Mapping', async (t: Test) => {
+  const extended = t.applyPlugin(plugin) as Test & ReturnType<typeof plugin>
+  await extended.constructs(Mapping, mappingData, mappingEncodings)
+  await extended.encodes(Mapping, mappingData, mappingEncodings)
+  await extended.decodes(Mapping, mappingData, mappingEncodings)
 })
 
 const sampleData = {
@@ -242,11 +224,11 @@ const sampleEncodings = [
   { field: 'label', value: embeddedField('1a', labelEncodings) },
 ]
 
-tap.test('Sample', (t: TestSuite) => {
-  t.constructs(Sample, sampleData, sampleEncodings)
-  t.encodes(Sample, sampleData, sampleEncodings)
-  t.decodes(Sample, sampleData, sampleEncodings)
-  t.end()
+tap.test('Sample', async (t: Test) => {
+  const extended = t.applyPlugin(plugin) as Test & ReturnType<typeof plugin>
+  await extended.constructs(Sample, sampleData, sampleEncodings)
+  await extended.encodes(Sample, sampleData, sampleEncodings)
+  await extended.decodes(Sample, sampleData, sampleEncodings)
 })
 
 const valueTypeData = {
@@ -259,11 +241,11 @@ const valueTypeEncodings = [
   { field: 'unit', value: '100a' },
 ]
 
-tap.test('ValueType', (t: TestSuite) => {
-  t.constructs(ValueType, valueTypeData, valueTypeEncodings)
-  t.encodes(ValueType, valueTypeData, valueTypeEncodings)
-  t.decodes(ValueType, valueTypeData, valueTypeEncodings)
-  t.end()
+tap.test('ValueType', async (t: Test) => {
+  const extended = t.applyPlugin(plugin) as Test & ReturnType<typeof plugin>
+  await extended.constructs(ValueType, valueTypeData, valueTypeEncodings)
+  await extended.encodes(ValueType, valueTypeData, valueTypeEncodings)
+  await extended.decodes(ValueType, valueTypeData, valueTypeEncodings)
 })
 
 const profileData = {
@@ -297,14 +279,16 @@ const profileEncodings = [
   { field: 'comment', value: '6a020b0c' },
 ]
 
-tap.test('Profile', (t: TestSuite) => {
-  t.constructs(Profile, profileData, profileEncodings)
-  t.encodes(Profile, profileData, profileEncodings)
+tap.test('Profile', async (t: Test) => {
+  const extended = t.applyPlugin(plugin) as Test & ReturnType<typeof plugin>
+  await extended.constructs(Profile, profileData, profileEncodings)
+  await extended.encodes(Profile, profileData, profileEncodings)
+  await extended.decodes(Profile, profileData, profileEncodings)
 
   // Profiles additionally can be encoded asynchronously to break up
   // encoding into smaller chunks to have less latency impact.
-  t.test('async encoding', (t: TestSuite) => {
-    t.test('per-field validation', async (t2: TestSuite) => {
+  await t.test('async encoding', async (t: Test) => {
+    await t.test('per-field validation', async (t2: Test) => {
       for (const { field, value } of profileEncodings) {
         const fun = new Profile({
           // Hack to exclude stringTable data from any checks except for the string table itself
@@ -314,24 +298,17 @@ tap.test('Profile', (t: TestSuite) => {
         const msg = `has expected encoding of ${field} field`
         t2.equal(bufToHex(await fun.encodeAsync()), value, msg)
       }
-      t2.end()
     })
 
-    t.test('full object validation', async (t2: TestSuite) => {
+    await t.test('full object validation', async (t2: Test) => {
       const fun = new Profile(profileData)
       t2.equal(
         bufToHex(await fun.encodeAsync()),
         fullEncoding(profileEncodings),
         'has expected encoding of full object'
       )
-      t2.end()
     })
-
-    t.end()
   })
-
-  t.decodes(Profile, profileData, profileEncodings)
-  t.end()
 })
 
 function encodeStringTable(strings: StringTable) {
@@ -386,8 +363,8 @@ function bufToHex(buf: Uint8Array) {
   return Array.from(buf).map(hexNum).join('')
 }
 
-tap.test('StringTable', (t: TestSuite) => {
-  t.test('encodes correctly', (t: TestSuite) => {
+tap.test('StringTable', async (t: Test) => {
+  await t.test('encodes correctly', async (t: Test) => {
     const encodings = {
       '': '3200',
       'hello': '320568656c6c6f'
@@ -396,31 +373,24 @@ tap.test('StringTable', (t: TestSuite) => {
     t.equal(bufToHex(table.encode()), encodings[''])
     table.dedup('hello')
     t.equal(bufToHex(table.encode()), encodings[''] + encodings['hello'])
-    t.end()
   })
-
-  t.end()
 })
 
-function profileToObject(profile: any): Object {
+function profileToObject(profile: any): object {
   profile.stringTable = profile.stringTable.strings
   return profile
 }
 
-tap.test('Protobufjs compat', (t: TestSuite) => {
-  t.test('encodes correctly', (t: TestSuite) => {
+tap.test('Protobufjs compat', async (t: Test) => {
+  await t.test('encodes correctly', async (t: Test) => {
     const profile = new Profile(profileData)
     const encodedProfile = profile.encode()
     const decodedProfile = decode(encodedProfile)
     t.same(profileToObject(profile), toObject(decodedProfile, {longs: String, defaults: true}))
-    t.end()
   })
 
-  t.test('decodes correctly', (t: TestSuite) => {
+  await t.test('decodes correctly', async (t: Test) => {
     const buf = gunzipSync(fs.readFileSync('./testing/test.pprof'))
     t.same(profileToObject(Profile.decode(buf)), toObject(decode(buf), {longs: String, defaults: true}))
-    t.end()
   })
-
-  t.end()
 })
