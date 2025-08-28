@@ -328,6 +328,10 @@ export class ValueType {
   type: Numeric
   unit: Numeric
 
+  static create(data: ValueTypeInput): ValueType {
+    return data instanceof ValueType ? data : new ValueType(data)
+  }
+
   constructor(data: ValueTypeInput) {
     this.type = data.type || 0
     this.unit = data.unit || 0
@@ -387,6 +391,10 @@ export class Label {
   str: Numeric
   num: Numeric
   numUnit: Numeric
+
+  static create(data: LabelInput): Label {
+    return data instanceof Label ? data : new Label(data)
+  }
 
   constructor(data: LabelInput) {
     this.key = data.key || 0
@@ -466,10 +474,14 @@ export class Sample {
   value: Array<Numeric>
   label: Array<Label>
 
+  static create(data: SampleInput): Sample {
+    return data instanceof Sample ? data : new Sample(data)
+  }
+
   constructor(data: SampleInput) {
     this.locationId = data.locationId || []
     this.value = data.value || []
-    this.label = (data.label || []).map(l => new Label(l))
+    this.label = (data.label || []).map(Label.create)
   }
 
   get length() {
@@ -554,6 +566,10 @@ export class Mapping {
   hasFilenames: boolean
   hasLineNumbers: boolean
   hasInlineFrames: boolean
+
+  static create(data: MappingInput): Mapping {
+    return data instanceof Mapping ? data : new Mapping(data)
+  }
 
   constructor(data: MappingInput) {
     this.id = data.id || 0
@@ -681,6 +697,10 @@ export class Line {
   functionId: Numeric
   line: Numeric
 
+  static create(data: LineInput): Line {
+    return data instanceof Line ? data : new Line(data)
+  }
+
   constructor(data: LineInput) {
     this.functionId = data.functionId || 0
     this.line = data.line || 0
@@ -743,11 +763,15 @@ export class Location {
   line: Array<Line>
   isFolded: boolean
 
+  static create(data: LocationInput): Location {
+    return data instanceof Location ? data : new Location(data)
+  }
+
   constructor(data: LocationInput) {
     this.id = data.id || 0
     this.mappingId = data.mappingId || 0
     this.address = data.address || 0
-    this.line = (data.line || []).map(l => new Line(l))
+    this.line = (data.line || []).map(Line.create)
     this.isFolded = !!data.isFolded
   }
 
@@ -831,6 +855,10 @@ export class Function {
   systemName: Numeric
   filename: Numeric
   startLine: Numeric
+
+  static create(data: FunctionInput): Function {
+    return data instanceof Function ? data : new Function(data)
+  }
 
   constructor(data: FunctionInput) {
     this.id = data.id || 0
@@ -939,17 +967,17 @@ export class Profile {
   defaultSampleType: Numeric
 
   constructor(data: ProfileInput = {}) {
-    this.sampleType = (data.sampleType || []).map(v => new ValueType(v))
-    this.sample = (data.sample || []).map(v => new Sample(v))
-    this.mapping = (data.mapping || []).map(v => new Mapping(v))
-    this.location = (data.location || []).map(v => new Location(v))
-    this.function = (data.function || []).map(v => new Function(v))
+    this.sampleType = (data.sampleType || []).map(ValueType.create)
+    this.sample = (data.sample || []).map(Sample.create)
+    this.mapping = (data.mapping || []).map(Mapping.create)
+    this.location = (data.location || []).map(Location.create)
+    this.function = (data.function || []).map(Function.create)
     this.stringTable = data.stringTable || new StringTable()
     this.dropFrames = data.dropFrames || 0
     this.keepFrames = data.keepFrames || 0
     this.timeNanos = data.timeNanos || 0
     this.durationNanos = data.durationNanos || 0
-    this.periodType = data.periodType ? new ValueType(data.periodType) : undefined
+    this.periodType = data.periodType ? ValueType.create(data.periodType) : undefined
     this.period = data.period || 0
     this.comment = data.comment || []
     this.defaultSampleType = data.defaultSampleType || 0
