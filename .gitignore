@@ -3,9 +3,8 @@
 .vscode
 .tap
 
-# Ignore dependencies and lock files
+# Ignore dependencies
 node_modules
-yarn.lock
 
 # Ignore build files
 dist
