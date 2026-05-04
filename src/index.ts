@@ -534,11 +534,11 @@ export class Sample {
   static decodeValue(data: SampleInput, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
-        data.locationId = pushAll(decodeNumbers(buffer), data.locationId);
-        break;
+        data.locationId = pushAll(decodeNumbers(buffer), data.locationId)
+        break
       case 2:
-        data.value = pushAll(decodeNumbers(buffer), data.value);
-        break;
+        data.value = pushAll(decodeNumbers(buffer), data.value)
+        break
       case 3:
         data.label = push(Label.decode(buffer), data.label)
         break
