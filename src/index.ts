@@ -134,6 +134,14 @@ function push<T>(value: T, list?: Array<T>): Array<T> {
   return list
 }
 
+function pushAll<T>(values: Array<T>, list?: Array<T>): Array<T> {
+  if (list == null) {
+    return values;
+  }
+  list.push(...values);
+  return list;
+}
+
 function measureNumber(number: Numeric): number {
   if (number === 0 || number === 0n) return 0
   const [hi, lo] = long(number)
@@ -526,11 +534,11 @@ export class Sample {
   static decodeValue(data: SampleInput, field: number, buffer: Uint8Array) {
     switch (field) {
       case 1:
-        data.locationId = decodeNumbers(buffer)
-        break
+        data.locationId = pushAll(decodeNumbers(buffer), data.locationId);
+        break;
       case 2:
-        data.value = decodeNumbers(buffer)
-        break
+        data.value = pushAll(decodeNumbers(buffer), data.value);
+        break;
       case 3:
         data.label = push(Label.decode(buffer), data.label)
         break
@@ -1182,7 +1190,7 @@ export class Profile {
         data.period = decodeNumber(buffer)
         break
       case 13:
-        data.comment = decodeNumbers(buffer)
+        data.comment = pushAll(decodeNumbers(buffer), data.comment)
         break
       case 14:
         data.defaultSampleType = decodeNumber(buffer)
