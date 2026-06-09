@@ -288,7 +288,7 @@ export class StringTable {
       // Encode strings on insertion
       this.#encodings.push(StringTable._encodeString(string))
     }
-    return this.#positions.get(string)
+    return this.#positions.get(string)!
   }
 
   _decodeString(buffer: Uint8Array) {
@@ -300,9 +300,9 @@ export class StringTable {
 
 function decode<T>(
   buffer: Uint8Array,
-  decoder: (data: DeepPartial<T>, field: number, value: Uint8Array) => void
+  decoder: (data: any, field: number, value: Uint8Array) => void
 ): DeepPartial<T> {
-  const data = {}
+  const data: any = {}
   let index = 0
 
   while (index < buffer.length) {
