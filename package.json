@@ -63,7 +63,7 @@
     "eslint": "^10.4.1",
     "protobufjs": "^8.6.0",
     "protobufjs-cli": "^2.5.1",
-    "tshy": "^3.0.2",
+    "tshy": "^4.1.2",
     "typescript": "^6.0.3"
   }
 }
