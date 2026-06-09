@@ -1,7 +1,6 @@
 # Ignore common dot-files
 .DS_Store
 .vscode
-.tap
 
 # Ignore dependencies
 node_modules
@@ -9,3 +8,4 @@ yarn.lock
 
 # Ignore build files
 dist
+dist-test
