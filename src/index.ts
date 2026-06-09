@@ -136,10 +136,10 @@ function push<T>(value: T, list?: Array<T>): Array<T> {
 
 function pushAll<T>(values: Array<T>, list?: Array<T>): Array<T> {
   if (list == null) {
-    return values;
+    return values
   }
-  list.push(...values);
-  return list;
+  list.push(...values)
+  return list
 }
 
 function measureNumber(number: Numeric): number {
