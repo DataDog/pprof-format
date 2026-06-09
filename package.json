@@ -64,7 +64,7 @@
     "protobufjs-cli": "^2.5.1",
     "tap": "^21.7.4",
     "tshy": "^3.0.2",
-    "typescript": "^5.8.3"
+    "typescript": "^6.0.3"
   },
   "tap": {
     "plugin": [
