@@ -5,6 +5,7 @@
 
 # Ignore dependencies
 node_modules
+yarn.lock
 
 # Ignore build files
 dist

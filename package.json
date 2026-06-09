@@ -34,8 +34,8 @@
     "prepare": "tshy",
     "build": "tshy",
     "lint": "eslint src",
-    "prepublishOnly": "yarn build",
-    "pretest": "yarn build",
+    "prepublishOnly": "npm run build",
+    "pretest": "npm run build",
     "test": "tap --allow-incomplete-coverage src/index.test.ts",
     "proto": "mkdir -p proto && pbjs -t static-module -w commonjs -o testing/proto/profile.js testing/proto/profile.proto && pbts -o testing/proto/profile.d.ts testing/proto/profile.js"
   },
