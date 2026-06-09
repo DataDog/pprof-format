@@ -394,3 +394,45 @@ tap.test('Protobufjs compat', async (t: Test) => {
     t.same(profileToObject(Profile.decode(buf)), toObject(decode(buf), {longs: String, defaults: true}))
   })
 })
+
+tap.test('non-packed repeated fields', async (t: Test) => {
+  // Go's runtime/pprof encodes Sample.value as non-packed repeated int64 (one
+  // field occurrence per value). The decoder must append rather than overwrite
+  // on each occurrence.
+
+  await t.test(
+    'decodes Sample value from non-packed repeated int64',
+    async (t: Test) => {
+      // testing/non-packed-repeated.pprof has sampleType [samples/count, cpu/nanoseconds]
+      // and one sample whose two values are stored as separate non-packed
+      // varint fields.
+      const buf = fs.readFileSync('./testing/non-packed-repeated.pprof')
+
+      const profile = Profile.decode(buf)
+
+      t.same(profile.sample[0].value, [1, 10000000])
+    },
+  )
+
+  await t.test(
+    'decodes Sample locationId from non-packed repeated int64',
+    async (t: Test) => {
+      // field 1 (locationId), wire 0: tag = (1 << 3) | 0 = 0x08
+      // Two occurrences: value 5 → 08 05, value 7 → 08 07
+      const sample = Sample.decode(hexToBuf('08050807'))
+
+      t.same(sample.locationId, [5, 7])
+    },
+  )
+
+  await t.test(
+    'decodes Profile comment from non-packed repeated int64',
+    async (t: Test) => {
+      // field 13 (comment), wire 0: tag = (13 << 3) | 0 = 0x68
+      // Two occurrences: value 3 → 68 03, value 9 → 68 09
+      const profile = Profile.decode(hexToBuf('68036809'))
+
+      t.same(profile.comment, [3, 9])
+    },
+  )
+})
