@@ -270,7 +270,7 @@ export class StringTable {
     buffer[offset++] = 50 // (6 << 3) + kTypeLengthDelim
     offset = encodeNumber(buffer, offset, stringBuffer.length)
     if (stringBuffer.length > 0) {
-      buffer.set(stringBuffer, offset++)
+      buffer.set(stringBuffer, offset)
     }
     return buffer
   }
