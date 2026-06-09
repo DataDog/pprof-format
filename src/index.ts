@@ -138,7 +138,9 @@ function pushAll<T>(values: Array<T>, list?: Array<T>): Array<T> {
   if (list == null) {
     return values
   }
-  list.push(...values)
+  for (const value of values) {
+    list.push(value)
+  }
   return list
 }
 
