@@ -50,7 +50,7 @@ function hasMatch(found: any, wanted: any): boolean {
   return found == wanted
 }
 
-function assertHas(found: any, wanted: any, message?: string) {
+function assertHas(found: any, wanted: any, message: string) {
   assert.ok(hasMatch(found, wanted), message)
 }
 
