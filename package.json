@@ -55,7 +55,7 @@
     "profile"
   ],
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.5",
+    "@eslint/eslintrc": "^3.3.6",
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.0.0",
     "@typescript-eslint/eslint-plugin": "^8.61.0",
