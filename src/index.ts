@@ -48,14 +48,14 @@ function getValue(mode: number, buffer: Uint8Array) {
     case kTypeVarInt:
       for (let i = 0; i < buffer.length; i++) {
         if (!(buffer[i] & 0b10000000)) {
-          return makeValue(buffer.slice(0, i + 1))
+          return makeValue(buffer.subarray(0, i + 1))
         }
       }
       return makeValue(buffer)
     case kTypeLengthDelim: {
       const offset = countNumberBytes(buffer)
       const size = decodeNumber(buffer)
-      return makeValue(buffer.slice(offset, Number(size) + offset), offset)
+      return makeValue(buffer.subarray(offset, Number(size) + offset), offset)
     }
     default:
       throw new Error(`Unrecognized value type: ${mode}`)
@@ -118,7 +118,7 @@ function decodeNumbers(buffer: Uint8Array): Array<Numeric> {
 
   for (let i = 0; i < buffer.length; i++) {
     if ((buffer[i] & 0b10000000) === 0) {
-      values.push(decodeNumber(buffer.slice(start, i + 1)))
+      values.push(decodeNumber(buffer.subarray(start, i + 1)))
       start = i + 1
     }
   }
@@ -320,7 +320,7 @@ function decode<T>(
     const mode = buffer[index] & 0b111
     index++
 
-    const { offset, value } = getValue(mode, buffer.slice(index))
+    const { offset, value } = getValue(mode, buffer.subarray(index))
     index += value.length + offset
 
     decoder(data, field, value)
