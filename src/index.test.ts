@@ -154,12 +154,14 @@ test('Label', async (t) => {
 
 const lineData = {
   functionId: 1234,
-  line: 5678
+  line: 5678,
+  column: 90
 }
 
 const lineEncodings = [
   { field: 'functionId', value: '08d209' },
   { field: 'line', value: '10ae2c' },
+  { field: 'column', value: '185a' },
 ]
 
 test('Line', async (t) => {

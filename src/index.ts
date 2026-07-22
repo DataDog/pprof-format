@@ -701,11 +701,13 @@ export class Mapping {
 export type LineInput = {
   functionId?: Numeric
   line?: Numeric
+  column?: Numeric
 }
 
 export class Line {
   functionId: Numeric
   line: Numeric
+  column: Numeric
 
   static create(data: LineInput): Line {
     return data instanceof Line ? data : new Line(data)
@@ -714,12 +716,14 @@ export class Line {
   constructor(data: LineInput) {
     this.functionId = data.functionId || 0
     this.line = data.line || 0
+    this.column = data.column || 0
   }
 
   get length() {
     let total = 0
     total += measureNumberField(this.functionId)
     total += measureNumberField(this.line)
+    total += measureNumberField(this.column)
     return total
   }
 
@@ -732,6 +736,11 @@ export class Line {
     if (this.line) {
       buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
       offset = encodeNumber(buffer, offset, this.line)
+    }
+
+    if (this.column) {
+      buffer[offset++] = 24 // (3 << 3) + kTypeVarInt
+      offset = encodeNumber(buffer, offset, this.column)
     }
 
     return offset
@@ -749,6 +758,9 @@ export class Line {
         break
       case 2:
         data.line = decodeNumber(buffer)
+        break
+      case 3:
+        data.column = decodeNumber(buffer)
         break
     }
   }
