@@ -788,6 +788,9 @@ export namespace perftools {
 
             /** Line line */
             line?: (number|Long|null);
+
+            /** Line column */
+            column?: (number|Long|null);
         }
 
         /** Represents a Line. */
@@ -804,6 +807,9 @@ export namespace perftools {
 
             /** Line line. */
             public line: (number|Long);
+
+            /** Line column. */
+            public column: (number|Long);
 
             /**
              * Creates a new Line instance using the specified properties.
