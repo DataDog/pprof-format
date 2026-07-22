@@ -2562,6 +2562,7 @@ $root.perftools = (function() {
              * @interface ILine
              * @property {number|Long|null} [functionId] Line functionId
              * @property {number|Long|null} [line] Line line
+             * @property {number|Long|null} [column] Line column
              */
 
             /**
@@ -2596,6 +2597,14 @@ $root.perftools = (function() {
             Line.prototype.line = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
+             * Line column.
+             * @member {number|Long} column
+             * @memberof perftools.profiles.Line
+             * @instance
+             */
+            Line.prototype.column = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
              * Creates a new Line instance using the specified properties.
              * @function create
              * @memberof perftools.profiles.Line
@@ -2623,6 +2632,8 @@ $root.perftools = (function() {
                     writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.functionId);
                 if (message.line != null && Object.hasOwnProperty.call(message, "line"))
                     writer.uint32(/* id 2, wireType 0 =*/16).int64(message.line);
+                if (message.column != null && Object.hasOwnProperty.call(message, "column"))
+                    writer.uint32(/* id 3, wireType 0 =*/24).int64(message.column);
                 return writer;
             };
 
@@ -2663,6 +2674,10 @@ $root.perftools = (function() {
                         }
                     case 2: {
                             message.line = reader.int64();
+                            break;
+                        }
+                    case 3: {
+                            message.column = reader.int64();
                             break;
                         }
                     default:
@@ -2706,6 +2721,9 @@ $root.perftools = (function() {
                 if (message.line != null && message.hasOwnProperty("line"))
                     if (!$util.isInteger(message.line) && !(message.line && $util.isInteger(message.line.low) && $util.isInteger(message.line.high)))
                         return "line: integer|Long expected";
+                if (message.column != null && message.hasOwnProperty("column"))
+                    if (!$util.isInteger(message.column) && !(message.column && $util.isInteger(message.column.low) && $util.isInteger(message.column.high)))
+                        return "column: integer|Long expected";
                 return null;
             };
 
@@ -2739,6 +2757,15 @@ $root.perftools = (function() {
                         message.line = object.line;
                     else if (typeof object.line === "object")
                         message.line = new $util.LongBits(object.line.low >>> 0, object.line.high >>> 0).toNumber();
+                if (object.column != null)
+                    if ($util.Long)
+                        (message.column = $util.Long.fromValue(object.column)).unsigned = false;
+                    else if (typeof object.column === "string")
+                        message.column = parseInt(object.column, 10);
+                    else if (typeof object.column === "number")
+                        message.column = object.column;
+                    else if (typeof object.column === "object")
+                        message.column = new $util.LongBits(object.column.low >>> 0, object.column.high >>> 0).toNumber();
                 return message;
             };
 
@@ -2766,6 +2793,11 @@ $root.perftools = (function() {
                         object.line = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                     } else
                         object.line = options.longs === String ? "0" : 0;
+                    if ($util.Long) {
+                        var long = new $util.Long(0, 0, false);
+                        object.column = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                    } else
+                        object.column = options.longs === String ? "0" : 0;
                 }
                 if (message.functionId != null && message.hasOwnProperty("functionId"))
                     if (typeof message.functionId === "number")
@@ -2777,6 +2809,11 @@ $root.perftools = (function() {
                         object.line = options.longs === String ? String(message.line) : message.line;
                     else
                         object.line = options.longs === String ? $util.Long.prototype.toString.call(message.line) : options.longs === Number ? new $util.LongBits(message.line.low >>> 0, message.line.high >>> 0).toNumber() : message.line;
+                if (message.column != null && message.hasOwnProperty("column"))
+                    if (typeof message.column === "number")
+                        object.column = options.longs === String ? String(message.column) : message.column;
+                    else
+                        object.column = options.longs === String ? $util.Long.prototype.toString.call(message.column) : options.longs === Number ? new $util.LongBits(message.column.low >>> 0, message.column.high >>> 0).toNumber() : message.column;
                 return object;
             };
 
