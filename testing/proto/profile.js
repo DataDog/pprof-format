@@ -47,6 +47,7 @@ $root.perftools = (function() {
              * @property {number|Long|null} [period] Profile period
              * @property {Array.<number|Long>|null} [comment] Profile comment
              * @property {number|Long|null} [defaultSampleType] Profile defaultSampleType
+             * @property {number|Long|null} [docUrl] Profile docUrl
              */
 
             /**
@@ -184,6 +185,14 @@ $root.perftools = (function() {
             Profile.prototype.defaultSampleType = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
+             * Profile docUrl.
+             * @member {number|Long} docUrl
+             * @memberof perftools.profiles.Profile
+             * @instance
+             */
+            Profile.prototype.docUrl = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
              * Creates a new Profile instance using the specified properties.
              * @function create
              * @memberof perftools.profiles.Profile
@@ -245,6 +254,8 @@ $root.perftools = (function() {
                 }
                 if (message.defaultSampleType != null && Object.hasOwnProperty.call(message, "defaultSampleType"))
                     writer.uint32(/* id 14, wireType 0 =*/112).int64(message.defaultSampleType);
+                if (message.docUrl != null && Object.hasOwnProperty.call(message, "docUrl"))
+                    writer.uint32(/* id 15, wireType 0 =*/120).int64(message.docUrl);
                 return writer;
             };
 
@@ -352,6 +363,10 @@ $root.perftools = (function() {
                         }
                     case 14: {
                             message.defaultSampleType = reader.int64();
+                            break;
+                        }
+                    case 15: {
+                            message.docUrl = reader.int64();
                             break;
                         }
                     default:
@@ -471,6 +486,9 @@ $root.perftools = (function() {
                 if (message.defaultSampleType != null && message.hasOwnProperty("defaultSampleType"))
                     if (!$util.isInteger(message.defaultSampleType) && !(message.defaultSampleType && $util.isInteger(message.defaultSampleType.low) && $util.isInteger(message.defaultSampleType.high)))
                         return "defaultSampleType: integer|Long expected";
+                if (message.docUrl != null && message.hasOwnProperty("docUrl"))
+                    if (!$util.isInteger(message.docUrl) && !(message.docUrl && $util.isInteger(message.docUrl.low) && $util.isInteger(message.docUrl.high)))
+                        return "docUrl: integer|Long expected";
                 return null;
             };
 
@@ -616,6 +634,15 @@ $root.perftools = (function() {
                         message.defaultSampleType = object.defaultSampleType;
                     else if (typeof object.defaultSampleType === "object")
                         message.defaultSampleType = new $util.LongBits(object.defaultSampleType.low >>> 0, object.defaultSampleType.high >>> 0).toNumber();
+                if (object.docUrl != null)
+                    if ($util.Long)
+                        (message.docUrl = $util.Long.fromValue(object.docUrl)).unsigned = false;
+                    else if (typeof object.docUrl === "string")
+                        message.docUrl = parseInt(object.docUrl, 10);
+                    else if (typeof object.docUrl === "number")
+                        message.docUrl = object.docUrl;
+                    else if (typeof object.docUrl === "object")
+                        message.docUrl = new $util.LongBits(object.docUrl.low >>> 0, object.docUrl.high >>> 0).toNumber();
                 return message;
             };
 
@@ -673,6 +700,11 @@ $root.perftools = (function() {
                         object.defaultSampleType = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                     } else
                         object.defaultSampleType = options.longs === String ? "0" : 0;
+                    if ($util.Long) {
+                        var long = new $util.Long(0, 0, false);
+                        object.docUrl = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                    } else
+                        object.docUrl = options.longs === String ? "0" : 0;
                 }
                 if (message.sampleType && message.sampleType.length) {
                     object.sampleType = [];
@@ -744,6 +776,11 @@ $root.perftools = (function() {
                         object.defaultSampleType = options.longs === String ? String(message.defaultSampleType) : message.defaultSampleType;
                     else
                         object.defaultSampleType = options.longs === String ? $util.Long.prototype.toString.call(message.defaultSampleType) : options.longs === Number ? new $util.LongBits(message.defaultSampleType.low >>> 0, message.defaultSampleType.high >>> 0).toNumber() : message.defaultSampleType;
+                if (message.docUrl != null && message.hasOwnProperty("docUrl"))
+                    if (typeof message.docUrl === "number")
+                        object.docUrl = options.longs === String ? String(message.docUrl) : message.docUrl;
+                    else
+                        object.docUrl = options.longs === String ? $util.Long.prototype.toString.call(message.docUrl) : options.longs === Number ? new $util.LongBits(message.docUrl.low >>> 0, message.docUrl.high >>> 0).toNumber() : message.docUrl;
                 return object;
             };
 
