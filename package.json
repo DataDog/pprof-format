@@ -1,6 +1,6 @@
 {
   "name": "pprof-format",
-  "version": "2.2.3",
+  "version": "2.3.0",
   "description": "Pure JavaScript pprof encoder and decoder",
   "author": "Datadog Inc. <info@datadoghq.com>",
   "license": "MIT",
