@@ -50,6 +50,9 @@ export namespace perftools {
 
             /** Profile defaultSampleType */
             defaultSampleType?: (number|Long|null);
+
+            /** Profile docUrl */
+            docUrl?: (number|Long|null);
         }
 
         /** Represents a Profile. */
@@ -102,6 +105,9 @@ export namespace perftools {
 
             /** Profile defaultSampleType. */
             public defaultSampleType: (number|Long);
+
+            /** Profile docUrl. */
+            public docUrl: (number|Long);
 
             /**
              * Creates a new Profile instance using the specified properties.
