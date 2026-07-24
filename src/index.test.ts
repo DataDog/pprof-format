@@ -319,6 +319,27 @@ test('Profile', async (t) => {
   })
 })
 
+test('Profile docUrl', async (t) => {
+  // doc_url is field 15, an int64 index into the string table: tag byte
+  // (15 << 3) | kTypeVarInt = 0x78, followed by the varint value.
+  await t.test('encodes docUrl', () => {
+    // emptyTableToken excludes the string table so only docUrl is encoded.
+    const profile = new Profile({
+      stringTable: new StringTable(emptyTableToken),
+      docUrl: 5,
+    })
+    assert.strictEqual(bufToHex(profile.encode()), '7805')
+  })
+
+  await t.test('decodes docUrl', () => {
+    assert.strictEqual(Number(Profile.decode(hexToBuf('7805')).docUrl), 5)
+  })
+
+  await t.test('defaults docUrl to 0 when absent', () => {
+    assert.strictEqual(Number(new Profile().docUrl), 0)
+  })
+})
+
 function encodeStringTable(strings: StringTable) {
   return strings.strings.map(s => {
     const buf = new TextEncoder().encode(s)

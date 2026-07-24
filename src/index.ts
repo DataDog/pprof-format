@@ -970,6 +970,7 @@ export type ProfileInput = {
   period?: Numeric
   comment?: Array<Numeric>
   defaultSampleType?: Numeric
+  docUrl?: Numeric
 }
 
 export class Profile {
@@ -987,6 +988,7 @@ export class Profile {
   period: Numeric
   comment: Array<Numeric>
   defaultSampleType: Numeric
+  docUrl: Numeric
 
   constructor(data: ProfileInput = {}) {
     this.sampleType = (data.sampleType || []).map(ValueType.create)
@@ -1003,6 +1005,7 @@ export class Profile {
     this.period = data.period || 0
     this.comment = data.comment || []
     this.defaultSampleType = data.defaultSampleType || 0
+    this.docUrl = data.docUrl || 0
   }
 
   get length() {
@@ -1021,6 +1024,7 @@ export class Profile {
     total += measureNumberField(this.period)
     total += measureNumberArrayField(this.comment)
     total += measureNumberField(this.defaultSampleType)
+    total += measureNumberField(this.docUrl)
     return total
   }
 
@@ -1112,6 +1116,11 @@ export class Profile {
     if (this.defaultSampleType) {
       buffer[offset++] = 112 // (14 << 3) + kTypeVarInt
       offset = encodeNumber(buffer, offset, this.defaultSampleType)
+    }
+
+    if (this.docUrl) {
+      buffer[offset++] = 120 // (15 << 3) + kTypeVarInt
+      offset = encodeNumber(buffer, offset, this.docUrl)
     }
 
     return offset
@@ -1208,6 +1217,9 @@ export class Profile {
         break
       case 14:
         data.defaultSampleType = decodeNumber(buffer)
+        break
+      case 15:
+        data.docUrl = decodeNumber(buffer)
         break
     }
   }
