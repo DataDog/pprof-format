@@ -60,7 +60,7 @@
     "@types/node": "^26.1.1",
     "@typescript-eslint/eslint-plugin": "^8.65.0",
     "@typescript-eslint/parser": "^8.37.0",
-    "eslint": "^10.7.0",
+    "eslint": "^10.8.0",
     "protobufjs": "^8.7.1",
     "protobufjs-cli": "^2.6.1",
     "tshy": "^4.1.3",
