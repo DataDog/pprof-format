@@ -11,6 +11,16 @@ const lowMaxBig = 2n ** 32n - 1n
 const lowMax = 2 ** 32 - 1
 const lowMaxPlus1 = lowMax + 1
 
+/**
+ * Yields to the event loop. Uses setImmediate where available (Node.js), and
+ * falls back to setTimeout in browsers, which lack setImmediate.
+ */
+function yieldToEventLoop(): Promise<void> {
+  return typeof setImmediate === 'function'
+    ? new Promise(resolve => setImmediate(resolve))
+    : new Promise(resolve => setTimeout(resolve, 0))
+}
+
 // Buffer.from(string, 'utf8') is faster, when available
 const toUtf8 = typeof Buffer === 'undefined'
   ? (value: string) => new TextEncoder().encode(value)
@@ -1139,22 +1149,22 @@ export class Profile {
 
   async _encodeToBufferAsync(buffer: Uint8Array, offset = 0): Promise<number> {
     offset = this._encodeSampleTypesToBuffer(buffer, offset)
-    await new Promise(setImmediate)
+    await yieldToEventLoop()
 
     offset = this._encodeSamplesToBuffer(buffer, offset)
-    await new Promise(setImmediate)
+    await yieldToEventLoop()
 
     offset = this._encodeMappingsToBuffer(buffer, offset)
-    await new Promise(setImmediate)
+    await yieldToEventLoop()
 
     offset = this._encodeLocationsToBuffer(buffer, offset)
-    await new Promise(setImmediate)
+    await yieldToEventLoop()
 
     offset = this._encodeFunctionsToBuffer(buffer, offset)
-    await new Promise(setImmediate)
+    await yieldToEventLoop()
 
     offset = this.stringTable._encodeToBuffer(buffer, offset)
-    await new Promise(setImmediate)
+    await yieldToEventLoop()
 
     offset = this._encodeBasicValuesToBuffer(buffer, offset)
     return offset
