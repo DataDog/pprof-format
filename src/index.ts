@@ -4,241 +4,29 @@
  * This product includes software developed at Datadog (https://www.datadoghq.com/  Copyright 2022 Datadog, Inc.
  */
 
-/*!
- * Private helpers. These are only used by other helpers.
- */
-const lowMaxBig = 2n ** 32n - 1n
-const lowMax = 2 ** 32 - 1
-const lowMaxPlus1 = lowMax + 1
-
-// Buffer.from(string, 'utf8') is faster, when available
-const toUtf8 = typeof Buffer === 'undefined'
-  ? (value: string) => new TextEncoder().encode(value)
-  : (value: string) => Buffer.from(value, 'utf8')
-
-type Numeric = number | bigint
-
-type DeepPartial<T> = {
-  [P in keyof T]?: DeepPartial<T[P]>
-}
-
-function countNumberBytes(buffer: Uint8Array): number {
-  if (!buffer.length) return 0
-  let i = 0
-  while (i < buffer.length && buffer[i++] >= 0b10000000);
-  return i
-}
-
-function decodeBigNumber(buffer: Uint8Array): bigint {
-  if (!buffer.length) return BigInt(0)
-  let value = BigInt(buffer[0] & 0b01111111)
-  let i = 0
-  while (buffer[i++] >= 0b10000000) {
-    value |= BigInt(buffer[i] & 0b01111111) << BigInt(7 * i)
-  }
-  return value
-}
-
-function makeValue(value: Uint8Array, offset = 0) {
-  return { value, offset }
-}
-
-function getValue(mode: number, buffer: Uint8Array) {
-  switch (mode) {
-    case kTypeVarInt:
-      for (let i = 0; i < buffer.length; i++) {
-        if (!(buffer[i] & 0b10000000)) {
-          return makeValue(buffer.subarray(0, i + 1))
-        }
-      }
-      return makeValue(buffer)
-    case kTypeLengthDelim: {
-      const offset = countNumberBytes(buffer)
-      const size = decodeNumber(buffer)
-      return makeValue(buffer.subarray(offset, Number(size) + offset), offset)
-    }
-    default:
-      throw new Error(`Unrecognized value type: ${mode}`)
-  }
-}
-
-function lowBits(number: Numeric): number {
-  return typeof number !== 'bigint'
-    ? (number >>> 0) % lowMaxPlus1
-    : Number(number & lowMaxBig)
-}
-
-function highBits(number: Numeric): number {
-  return typeof number !== 'bigint'
-    ? (number / lowMaxPlus1) >>> 0
-    : Number(number >> 32n & lowMaxBig)
-}
-
-function long(number: Numeric): Array<number> {
-  const sign = number < 0
-  if (sign) number = -number
-
-  let lo = lowBits(number)
-  let hi = highBits(number)
-
-  if (sign) {
-    hi = ~hi >>> 0
-    lo = ~lo >>> 0
-    if (++lo > lowMax) {
-      lo = 0
-      if (++hi > lowMax) { hi = 0 }
-    }
-  }
-
-  return [hi, lo]
-}
-
-/**
- * Public helpers. These are used in the type definitions.
- */
-const kTypeVarInt = 0
-const kTypeLengthDelim = 2
-
-function decodeNumber(buffer: Uint8Array): Numeric {
-  const size = countNumberBytes(buffer)
-  if (size > 4) return decodeBigNumber(buffer)
-  if (!buffer.length) return 0
-
-  let value = buffer[0] & 0b01111111
-  let i = 0
-  while (buffer[i++] >= 0b10000000) {
-    value |= (buffer[i] & 0b01111111) << (7 * i)
-  }
-  return value
-}
-
-function decodeNumbers(buffer: Uint8Array): Array<Numeric> {
-  const values = []
-  let start = 0
-
-  for (let i = 0; i < buffer.length; i++) {
-    if ((buffer[i] & 0b10000000) === 0) {
-      values.push(decodeNumber(buffer.subarray(start, i + 1)))
-      start = i + 1
-    }
-  }
-
-  return values
-}
-
-function push<T>(value: T, list?: Array<T>): Array<T> {
-  if (list == null) {
-    return [value]
-  }
-  list.push(value)
-  return list
-}
-
-function pushAll<T>(values: Array<T>, list?: Array<T>): Array<T> {
-  if (list == null) {
-    return values
-  }
-  for (const value of values) {
-    list.push(value)
-  }
-  return list
-}
-
-function measureNumber(number: Numeric): number {
-  if (number === 0 || number === 0n) return 0
-  const [hi, lo] = long(number)
-
-  const a = lo
-  const b = (lo >>> 28 | hi << 4) >>> 0
-  const c = hi >>> 24
-
-  if (c !== 0) {
-    return c < 128 ? 9 : 10
-  }
-
-  if (b !== 0) {
-    if (b < 16384) {
-      return b < 128 ? 5 : 6
-    }
-
-    return b < 2097152 ? 7 : 8
-  }
-
-  if (a < 16384) {
-    return a < 128 ? 1 : 2
-  }
-
-  return a < 2097152 ? 3 : 4
-}
-
-function measureValue<T>(value: T): number {
-  if (typeof value === 'undefined') return 0
-  if (typeof value === 'number' || typeof value === 'bigint') {
-    return measureNumber(value) || 1
-  }
-  return (value as Array<T>).length
-}
-
-function measureArray<T>(list: Array<T>): number {
-  let size = 0
-  for (const item of list) {
-    size += measureValue(item)
-  }
-  return size
-}
-
-function measureNumberField(number: Numeric): number {
-  const length = measureNumber(number)
-  return length ? 1 + length : 0
-}
-
-function measureNumberArrayField(values: Numeric[]): number {
-  let total = 0
-  for (const value of values) {
-    // Arrays should always include zeros to keep positions consistent
-    total += measureNumber(value) || 1
-  }
-  // Packed arrays are encoded as Tag,Len,ConcatenatedElements
-  // Tag is only one byte because field number is always < 16 in pprof
-  return total ? 1 + measureNumber(total) + total : 0
-}
-
-function measureLengthDelimField<T>(value: T): number {
-  const length = measureValue(value)
-  // Length delimited records / submessages are encoded as Tag,Len,EncodedRecord
-  // Tag is only one byte because field number is always < 16 in pprof
-  return length ? 1 + measureNumber(length) + length : 0
-}
-
-function measureLengthDelimArrayField<T>(values: T[]): number {
-  let total = 0
-  for (const value of values) {
-    total += measureLengthDelimField(value)
-  }
-  return total
-}
-
-function encodeNumber(buffer: Uint8Array, i: number, number: Numeric): number {
-  if (number === 0 || number === 0n) {
-    buffer[i++] = 0
-    return i
-  }
-
-  let [hi, lo] = long(number)
-
-  while (hi) {
-    buffer[i++] = lo & 127 | 128
-    lo = (lo >>> 7 | hi << 25) >>> 0
-    hi >>>= 7
-  }
-  while (lo > 127) {
-    buffer[i++] = lo & 127 | 128
-    lo = lo >>> 7
-  }
-  buffer[i++] = lo
-
-  return i
-}
+import {
+  Message,
+  Numeric,
+  decodeFields,
+  decodeNumber,
+  decodeNumbers,
+  encodeBoolField,
+  encodeMessageArrayField,
+  encodeMessageField,
+  encodeNumber,
+  encodeNumberField,
+  encodePackedNumbersField,
+  kTypeLengthDelim,
+  measureBoolField,
+  measureMessageArrayField,
+  measureMessageField,
+  measureNumber,
+  measureNumberField,
+  measurePackedNumbersField,
+  push,
+  pushAll,
+  toUtf8,
+} from './protobuf.js'
 
 export const emptyTableToken = Symbol()
 
@@ -246,8 +34,15 @@ export class StringTable {
   strings = new Array<string>()
   #encodings = new Array<Uint8Array>()
   #positions = new Map<string, number>()
+  #field: number
 
-  constructor(tok?: typeof emptyTableToken) {
+  /**
+   * @param tok - pass emptyTableToken to create a table without the initial
+   * empty string.
+   * @param field - field number of the strings in the enclosing message.
+   */
+  constructor(tok?: typeof emptyTableToken, field = 6) {
+    this.#field = field
     if (tok !== emptyTableToken) {
       this.dedup('')
     }
@@ -274,10 +69,12 @@ export class StringTable {
     return buffer
   }
 
-  static _encodeStringFromUtf8(stringBuffer: Uint8Array | Buffer): Uint8Array {
-    const buffer = new Uint8Array(1 + stringBuffer.length + (measureNumber(stringBuffer.length) || 1))
-    let offset = 0
-    buffer[offset++] = 50 // (6 << 3) + kTypeLengthDelim
+  static _encodeStringFromUtf8(stringBuffer: Uint8Array | Buffer, field = 6): Uint8Array {
+    const tag = field * 8 + kTypeLengthDelim
+    const buffer = new Uint8Array(
+      (measureNumber(tag) || 1) + (measureNumber(stringBuffer.length) || 1) + stringBuffer.length
+    )
+    let offset = encodeNumber(buffer, 0, tag)
     offset = encodeNumber(buffer, offset, stringBuffer.length)
     if (stringBuffer.length > 0) {
       buffer.set(stringBuffer, offset)
@@ -285,8 +82,8 @@ export class StringTable {
     return buffer
   }
 
-  static _encodeString(string: string): Uint8Array {
-    return StringTable._encodeStringFromUtf8(toUtf8(string))
+  static _encodeString(string: string, field = 6): Uint8Array {
+    return StringTable._encodeStringFromUtf8(toUtf8(string), field)
   }
 
   dedup(string: string): number {
@@ -296,7 +93,7 @@ export class StringTable {
       this.#positions.set(string, pos)
 
       // Encode strings on insertion
-      this.#encodings.push(StringTable._encodeString(string))
+      this.#encodings.push(StringTable._encodeString(string, this.#field))
     }
     return this.#positions.get(string)!
   }
@@ -304,29 +101,8 @@ export class StringTable {
   _decodeString(buffer: Uint8Array) {
     const string = new TextDecoder().decode(buffer)
     this.#positions.set(string, this.strings.push(string) - 1)
-    this.#encodings.push(StringTable._encodeStringFromUtf8(buffer))
+    this.#encodings.push(StringTable._encodeStringFromUtf8(buffer, this.#field))
   }
-}
-
-function decode<T>(
-  buffer: Uint8Array,
-  decoder: (data: any, field: number, value: Uint8Array) => void
-): DeepPartial<T> {
-  const data: any = {}
-  let index = 0
-
-  while (index < buffer.length) {
-    const field = buffer[index] >> 3
-    const mode = buffer[index] & 0b111
-    index++
-
-    const { offset, value } = getValue(mode, buffer.subarray(index))
-    index += value.length + offset
-
-    decoder(data, field, value)
-  }
-
-  return data
 }
 
 export type ValueTypeInput = {
@@ -334,7 +110,7 @@ export type ValueTypeInput = {
   unit?: Numeric
 }
 
-export class ValueType {
+export class ValueType extends Message {
   type: Numeric
   unit: Numeric
 
@@ -343,34 +119,22 @@ export class ValueType {
   }
 
   constructor(data: ValueTypeInput) {
+    super()
     this.type = data.type || 0
     this.unit = data.unit || 0
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureNumberField(this.type)
-    total += measureNumberField(this.unit)
+    total += measureNumberField(1, this.type)
+    total += measureNumberField(2, this.unit)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.type) {
-      buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.type)
-    }
-
-    if (this.unit) {
-      buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.unit)
-    }
-
+    offset = encodeNumberField(buffer, offset, 1, this.type)
+    offset = encodeNumberField(buffer, offset, 2, this.unit)
     return offset
-  }
-
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
   }
 
   static decodeValue(data: ValueTypeInput, field: number, buffer: Uint8Array) {
@@ -385,7 +149,7 @@ export class ValueType {
   }
 
   static decode(buffer: Uint8Array): ValueType {
-    return new this(decode(buffer, this.decodeValue) as ValueTypeInput)
+    return new this(decodeFields(buffer, this.decodeValue) as ValueTypeInput)
   }
 }
 
@@ -396,7 +160,7 @@ export type LabelInput = {
   numUnit?: Numeric
 }
 
-export class Label {
+export class Label extends Message {
   key: Numeric
   str: Numeric
   num: Numeric
@@ -407,48 +171,28 @@ export class Label {
   }
 
   constructor(data: LabelInput) {
+    super()
     this.key = data.key || 0
     this.str = data.str || 0
     this.num = data.num || 0
     this.numUnit = data.numUnit || 0
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureNumberField(this.key)
-    total += measureNumberField(this.str)
-    total += measureNumberField(this.num)
-    total += measureNumberField(this.numUnit)
+    total += measureNumberField(1, this.key)
+    total += measureNumberField(2, this.str)
+    total += measureNumberField(3, this.num)
+    total += measureNumberField(4, this.numUnit)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.key) {
-      buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.key)
-    }
-
-    if (this.str) {
-      buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.str)
-    }
-
-    if (this.num) {
-      buffer[offset++] = 24 // (3 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.num)
-    }
-
-    if (this.numUnit) {
-      buffer[offset++] = 32 // (4 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.numUnit)
-    }
-
+    offset = encodeNumberField(buffer, offset, 1, this.key)
+    offset = encodeNumberField(buffer, offset, 2, this.str)
+    offset = encodeNumberField(buffer, offset, 3, this.num)
+    offset = encodeNumberField(buffer, offset, 4, this.numUnit)
     return offset
-  }
-
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
   }
 
   static decodeValue(data: LabelInput, field: number, buffer: Uint8Array) {
@@ -469,7 +213,7 @@ export class Label {
   }
 
   static decode(buffer: Uint8Array): Label {
-    return new this(decode(buffer, this.decodeValue) as LabelInput)
+    return new this(decodeFields(buffer, this.decodeValue) as LabelInput)
   }
 }
 
@@ -479,7 +223,7 @@ export type SampleInput = {
   label?: Array<LabelInput>
 }
 
-export class Sample {
+export class Sample extends Message {
   locationId: Array<Numeric>
   value: Array<Numeric>
   label: Array<Label>
@@ -489,48 +233,25 @@ export class Sample {
   }
 
   constructor(data: SampleInput) {
+    super()
     this.locationId = data.locationId || []
     this.value = data.value || []
     this.label = (data.label || []).map(Label.create)
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureNumberArrayField(this.locationId)
-    total += measureNumberArrayField(this.value)
-    total += measureLengthDelimArrayField(this.label)
+    total += measurePackedNumbersField(1, this.locationId)
+    total += measurePackedNumbersField(2, this.value)
+    total += measureMessageArrayField(3, this.label)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.locationId.length) {
-      buffer[offset++] = 10 // (1 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, measureArray(this.locationId))
-      for (const locationId of this.locationId) {
-        offset = encodeNumber(buffer, offset, locationId)
-      }
-    }
-
-    if (this.value.length) {
-      buffer[offset++] = 18 // (2 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, measureArray(this.value))
-      for (const value of this.value) {
-        offset = encodeNumber(buffer, offset, value)
-      }
-    }
-
-    for (const label of this.label) {
-      buffer[offset++] = 26 // (3 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, label.length)
-      offset = label._encodeToBuffer(buffer, offset)
-    }
-
+    offset = encodePackedNumbersField(buffer, offset, 1, this.locationId)
+    offset = encodePackedNumbersField(buffer, offset, 2, this.value)
+    offset = encodeMessageArrayField(buffer, offset, 3, this.label)
     return offset
-  }
-
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
   }
 
   static decodeValue(data: SampleInput, field: number, buffer: Uint8Array) {
@@ -548,7 +269,7 @@ export class Sample {
   }
 
   static decode(buffer: Uint8Array): Sample {
-    return new this(decode(buffer, this.decodeValue) as SampleInput)
+    return new this(decodeFields(buffer, this.decodeValue) as SampleInput)
   }
 }
 
@@ -565,7 +286,7 @@ export type MappingInput = {
   hasInlineFrames?: boolean
 }
 
-export class Mapping {
+export class Mapping extends Message {
   id: Numeric
   memoryStart: Numeric
   memoryLimit: Numeric
@@ -582,6 +303,7 @@ export class Mapping {
   }
 
   constructor(data: MappingInput) {
+    super()
     this.id = data.id || 0
     this.memoryStart = data.memoryStart || 0
     this.memoryLimit = data.memoryLimit || 0
@@ -594,68 +316,33 @@ export class Mapping {
     this.hasInlineFrames = !!data.hasInlineFrames
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureNumberField(this.id)
-    total += measureNumberField(this.memoryStart)
-    total += measureNumberField(this.memoryLimit)
-    total += measureNumberField(this.fileOffset)
-    total += measureNumberField(this.filename)
-    total += measureNumberField(this.buildId)
-    total += measureNumberField(this.hasFunctions ? 1 : 0)
-    total += measureNumberField(this.hasFilenames ? 1 : 0)
-    total += measureNumberField(this.hasLineNumbers ? 1 : 0)
-    total += measureNumberField(this.hasInlineFrames ? 1 : 0)
+    total += measureNumberField(1, this.id)
+    total += measureNumberField(2, this.memoryStart)
+    total += measureNumberField(3, this.memoryLimit)
+    total += measureNumberField(4, this.fileOffset)
+    total += measureNumberField(5, this.filename)
+    total += measureNumberField(6, this.buildId)
+    total += measureBoolField(7, this.hasFunctions)
+    total += measureBoolField(8, this.hasFilenames)
+    total += measureBoolField(9, this.hasLineNumbers)
+    total += measureBoolField(10, this.hasInlineFrames)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.id) {
-      buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.id)
-    }
-    if (this.memoryStart) {
-      buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.memoryStart)
-    }
-    if (this.memoryLimit) {
-      buffer[offset++] = 24 // (3 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.memoryLimit)
-    }
-    if (this.fileOffset) {
-      buffer[offset++] = 32 // (4 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.fileOffset)
-    }
-    if (this.filename) {
-      buffer[offset++] = 40 // (5 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.filename)
-    }
-    if (this.buildId) {
-      buffer[offset++] = 48 // (6 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.buildId)
-    }
-    if (this.hasFunctions) {
-      buffer[offset++] = 56 // (7 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, 1)
-    }
-    if (this.hasFilenames) {
-      buffer[offset++] = 64 // (8 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, 1)
-    }
-    if (this.hasLineNumbers) {
-      buffer[offset++] = 72 // (9 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, 1)
-    }
-    if (this.hasInlineFrames) {
-      buffer[offset++] = 80 // (10 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, 1)
-    }
+    offset = encodeNumberField(buffer, offset, 1, this.id)
+    offset = encodeNumberField(buffer, offset, 2, this.memoryStart)
+    offset = encodeNumberField(buffer, offset, 3, this.memoryLimit)
+    offset = encodeNumberField(buffer, offset, 4, this.fileOffset)
+    offset = encodeNumberField(buffer, offset, 5, this.filename)
+    offset = encodeNumberField(buffer, offset, 6, this.buildId)
+    offset = encodeBoolField(buffer, offset, 7, this.hasFunctions)
+    offset = encodeBoolField(buffer, offset, 8, this.hasFilenames)
+    offset = encodeBoolField(buffer, offset, 9, this.hasLineNumbers)
+    offset = encodeBoolField(buffer, offset, 10, this.hasInlineFrames)
     return offset
-  }
-
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
   }
 
   static decodeValue(data: MappingInput, field: number, buffer: Uint8Array) {
@@ -694,7 +381,7 @@ export class Mapping {
   }
 
   static decode(buffer: Uint8Array): Mapping {
-    return new this(decode(buffer, this.decodeValue) as MappingInput)
+    return new this(decodeFields(buffer, this.decodeValue) as MappingInput)
   }
 }
 
@@ -704,7 +391,7 @@ export type LineInput = {
   column?: Numeric
 }
 
-export class Line {
+export class Line extends Message {
   functionId: Numeric
   line: Numeric
   column: Numeric
@@ -714,41 +401,25 @@ export class Line {
   }
 
   constructor(data: LineInput) {
+    super()
     this.functionId = data.functionId || 0
     this.line = data.line || 0
     this.column = data.column || 0
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureNumberField(this.functionId)
-    total += measureNumberField(this.line)
-    total += measureNumberField(this.column)
+    total += measureNumberField(1, this.functionId)
+    total += measureNumberField(2, this.line)
+    total += measureNumberField(3, this.column)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.functionId) {
-      buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.functionId)
-    }
-
-    if (this.line) {
-      buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.line)
-    }
-
-    if (this.column) {
-      buffer[offset++] = 24 // (3 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.column)
-    }
-
+    offset = encodeNumberField(buffer, offset, 1, this.functionId)
+    offset = encodeNumberField(buffer, offset, 2, this.line)
+    offset = encodeNumberField(buffer, offset, 3, this.column)
     return offset
-  }
-
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
   }
 
   static decodeValue(data: LineInput, field: number, buffer: Uint8Array) {
@@ -766,7 +437,7 @@ export class Line {
   }
 
   static decode(buffer: Uint8Array): Line {
-    return new this(decode(buffer, this.decodeValue) as LineInput)
+    return new this(decodeFields(buffer, this.decodeValue) as LineInput)
   }
 }
 
@@ -778,7 +449,7 @@ export type LocationInput = {
   isFolded?: boolean
 }
 
-export class Location {
+export class Location extends Message {
   id: Numeric
   mappingId: Numeric
   address: Numeric
@@ -790,6 +461,7 @@ export class Location {
   }
 
   constructor(data: LocationInput) {
+    super()
     this.id = data.id || 0
     this.mappingId = data.mappingId || 0
     this.address = data.address || 0
@@ -797,45 +469,23 @@ export class Location {
     this.isFolded = !!data.isFolded
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureNumberField(this.id)
-    total += measureNumberField(this.mappingId)
-    total += measureNumberField(this.address)
-    total += measureLengthDelimArrayField(this.line)
-    total += measureNumberField(this.isFolded ? 1 : 0)
+    total += measureNumberField(1, this.id)
+    total += measureNumberField(2, this.mappingId)
+    total += measureNumberField(3, this.address)
+    total += measureMessageArrayField(4, this.line)
+    total += measureBoolField(5, this.isFolded)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.id) {
-      buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.id)
-    }
-    if (this.mappingId) {
-      buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.mappingId)
-    }
-    if (this.address) {
-      buffer[offset++] = 24 // (3 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.address)
-    }
-    for (const line of this.line) {
-      buffer[offset++] = 34 // (4 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, line.length)
-      offset = line._encodeToBuffer(buffer, offset)
-    }
-    if (this.isFolded) {
-      buffer[offset++] = 40 // (5 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, 1)
-    }
-
+    offset = encodeNumberField(buffer, offset, 1, this.id)
+    offset = encodeNumberField(buffer, offset, 2, this.mappingId)
+    offset = encodeNumberField(buffer, offset, 3, this.address)
+    offset = encodeMessageArrayField(buffer, offset, 4, this.line)
+    offset = encodeBoolField(buffer, offset, 5, this.isFolded)
     return offset
-  }
-
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
   }
 
   static decodeValue(data: LocationInput, field: number, buffer: Uint8Array) {
@@ -859,7 +509,7 @@ export class Location {
   }
 
   static decode(buffer: Uint8Array): Location {
-    return new this(decode(buffer, this.decodeValue) as LocationInput)
+    return new this(decodeFields(buffer, this.decodeValue) as LocationInput)
   }
 }
 
@@ -871,7 +521,7 @@ export type FunctionInput = {
   startLine?: Numeric
 }
 
-export class Function {
+export class Function extends Message {
   id: Numeric
   name: Numeric
   systemName: Numeric
@@ -883,6 +533,7 @@ export class Function {
   }
 
   constructor(data: FunctionInput) {
+    super()
     this.id = data.id || 0
     this.name = data.name || 0
     this.systemName = data.systemName || 0
@@ -890,44 +541,23 @@ export class Function {
     this.startLine = data.startLine || 0
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureNumberField(this.id)
-    total += measureNumberField(this.name)
-    total += measureNumberField(this.systemName)
-    total += measureNumberField(this.filename)
-    total += measureNumberField(this.startLine)
+    total += measureNumberField(1, this.id)
+    total += measureNumberField(2, this.name)
+    total += measureNumberField(3, this.systemName)
+    total += measureNumberField(4, this.filename)
+    total += measureNumberField(5, this.startLine)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.id) {
-      buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.id)
-    }
-    if (this.name) {
-      buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.name)
-    }
-    if (this.systemName) {
-      buffer[offset++] = 24 // (3 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.systemName)
-    }
-    if (this.filename) {
-      buffer[offset++] = 32 // (4 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.filename)
-    }
-    if (this.startLine) {
-      buffer[offset++] = 40 // (5 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.startLine)
-    }
-
+    offset = encodeNumberField(buffer, offset, 1, this.id)
+    offset = encodeNumberField(buffer, offset, 2, this.name)
+    offset = encodeNumberField(buffer, offset, 3, this.systemName)
+    offset = encodeNumberField(buffer, offset, 4, this.filename)
+    offset = encodeNumberField(buffer, offset, 5, this.startLine)
     return offset
-  }
-
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
   }
 
   static decodeValue(data: FunctionInput, field: number, buffer: Uint8Array) {
@@ -951,7 +581,7 @@ export class Function {
   }
 
   static decode(buffer: Uint8Array): Function {
-    return new this(decode(buffer, this.decodeValue) as FunctionInput)
+    return new this(decodeFields(buffer, this.decodeValue) as FunctionInput)
   }
 }
 
@@ -973,7 +603,7 @@ export type ProfileInput = {
   docUrl?: Numeric
 }
 
-export class Profile {
+export class Profile extends Message {
   sampleType: Array<ValueType>
   sample: Array<Sample>
   mapping: Array<Mapping>
@@ -991,6 +621,7 @@ export class Profile {
   docUrl: Numeric
 
   constructor(data: ProfileInput = {}) {
+    super()
     this.sampleType = (data.sampleType || []).map(ValueType.create)
     this.sample = (data.sample || []).map(Sample.create)
     this.mapping = (data.mapping || []).map(Mapping.create)
@@ -1008,121 +639,56 @@ export class Profile {
     this.docUrl = data.docUrl || 0
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureLengthDelimArrayField(this.sampleType)
-    total += measureLengthDelimArrayField(this.sample)
-    total += measureLengthDelimArrayField(this.mapping)
-    total += measureLengthDelimArrayField(this.location)
-    total += measureLengthDelimArrayField(this.function)
+    total += measureMessageArrayField(1, this.sampleType)
+    total += measureMessageArrayField(2, this.sample)
+    total += measureMessageArrayField(3, this.mapping)
+    total += measureMessageArrayField(4, this.location)
+    total += measureMessageArrayField(5, this.function)
     total += this.stringTable.encodedLength
-    total += measureNumberField(this.dropFrames)
-    total += measureNumberField(this.keepFrames)
-    total += measureNumberField(this.timeNanos)
-    total += measureNumberField(this.durationNanos)
-    total += measureLengthDelimField(this.periodType)
-    total += measureNumberField(this.period)
-    total += measureNumberArrayField(this.comment)
-    total += measureNumberField(this.defaultSampleType)
-    total += measureNumberField(this.docUrl)
+    total += measureNumberField(7, this.dropFrames)
+    total += measureNumberField(8, this.keepFrames)
+    total += measureNumberField(9, this.timeNanos)
+    total += measureNumberField(10, this.durationNanos)
+    total += measureMessageField(11, this.periodType)
+    total += measureNumberField(12, this.period)
+    total += measurePackedNumbersField(13, this.comment)
+    total += measureNumberField(14, this.defaultSampleType)
+    total += measureNumberField(15, this.docUrl)
     return total
   }
 
   _encodeSampleTypesToBuffer(buffer: Uint8Array, offset = 0): number {
-    for (const sampleType of this.sampleType) {
-      buffer[offset++] = 10 // (1 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, sampleType.length)
-      offset = sampleType._encodeToBuffer(buffer, offset)
-    }
-    return offset
+    return encodeMessageArrayField(buffer, offset, 1, this.sampleType)
   }
 
   _encodeSamplesToBuffer(buffer: Uint8Array, offset = 0): number {
-    for (const sample of this.sample) {
-      buffer[offset++] = 18 // (2 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, sample.length)
-      offset = sample._encodeToBuffer(buffer, offset)
-    }
-    return offset
+    return encodeMessageArrayField(buffer, offset, 2, this.sample)
   }
 
   _encodeMappingsToBuffer(buffer: Uint8Array, offset = 0): number {
-    for (const mapping of this.mapping) {
-      buffer[offset++] = 26 // (3 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, mapping.length)
-      offset = mapping._encodeToBuffer(buffer, offset)
-    }
-    return offset
+    return encodeMessageArrayField(buffer, offset, 3, this.mapping)
   }
 
   _encodeLocationsToBuffer(buffer: Uint8Array, offset = 0): number {
-    for (const location of this.location) {
-      buffer[offset++] = 34 // (4 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, location.length)
-      offset = location._encodeToBuffer(buffer, offset)
-    }
-    return offset
+    return encodeMessageArrayField(buffer, offset, 4, this.location)
   }
 
   _encodeFunctionsToBuffer(buffer: Uint8Array, offset = 0): number {
-    for (const fun of this.function) {
-      buffer[offset++] = 42 // (5 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, fun.length)
-      offset = fun._encodeToBuffer(buffer, offset)
-    }
-    return offset
+    return encodeMessageArrayField(buffer, offset, 5, this.function)
   }
 
   _encodeBasicValuesToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.dropFrames) {
-      buffer[offset++] = 56 // (7 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.dropFrames)
-    }
-
-    if (this.keepFrames) {
-      buffer[offset++] = 64 // (8 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.keepFrames)
-    }
-
-    if (this.timeNanos) {
-      buffer[offset++] = 72 // (9 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.timeNanos)
-    }
-
-    if (this.durationNanos) {
-      buffer[offset++] = 80 // (10 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.durationNanos)
-    }
-
-    if (typeof this.periodType !== 'undefined') {
-      buffer[offset++] = 90 // (11 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, this.periodType.length)
-      offset = this.periodType._encodeToBuffer(buffer, offset)
-    }
-
-    if (this.period) {
-      buffer[offset++] = 96 // (12 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.period)
-    }
-
-    if (this.comment.length) {
-      buffer[offset++] = 106 // (13 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, measureArray(this.comment))
-      for (const comment of this.comment) {
-        offset = encodeNumber(buffer, offset, comment)
-      }
-    }
-
-    if (this.defaultSampleType) {
-      buffer[offset++] = 112 // (14 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.defaultSampleType)
-    }
-
-    if (this.docUrl) {
-      buffer[offset++] = 120 // (15 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.docUrl)
-    }
-
+    offset = encodeNumberField(buffer, offset, 7, this.dropFrames)
+    offset = encodeNumberField(buffer, offset, 8, this.keepFrames)
+    offset = encodeNumberField(buffer, offset, 9, this.timeNanos)
+    offset = encodeNumberField(buffer, offset, 10, this.durationNanos)
+    offset = encodeMessageField(buffer, offset, 11, this.periodType)
+    offset = encodeNumberField(buffer, offset, 12, this.period)
+    offset = encodePackedNumbersField(buffer, offset, 13, this.comment)
+    offset = encodeNumberField(buffer, offset, 14, this.defaultSampleType)
+    offset = encodeNumberField(buffer, offset, 15, this.docUrl)
     return offset
   }
 
@@ -1160,12 +726,9 @@ export class Profile {
     return offset
   }
 
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
-  }
-
-  async encodeAsync(buffer = new Uint8Array(this.length)): Promise<Uint8Array> {
+  async encodeAsync(buffer?: Uint8Array): Promise<Uint8Array> {
+    const length = this.length
+    buffer ??= new Uint8Array(length)
     await this._encodeToBufferAsync(buffer, 0)
     return buffer
   }
@@ -1225,6 +788,6 @@ export class Profile {
   }
 
   static decode(buffer: Uint8Array): Profile {
-    return new this(decode(buffer, this.decodeValue) as ProfileInput)
+    return new this(decodeFields(buffer, this.decodeValue) as ProfileInput)
   }
 }

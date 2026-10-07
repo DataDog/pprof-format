@@ -37,7 +37,7 @@
     "lint": "eslint src",
     "prepublishOnly": "npm run build",
     "pretest": "npm run build && npm run build:test",
-    "test": "node --test dist-test/index.test.js",
+    "test": "node --test dist-test/index.test.js dist-test/protobuf.test.js",
     "proto": "mkdir -p proto && pbjs -t static-module -w commonjs -o testing/proto/profile.js testing/proto/profile.proto && pbts -o testing/proto/profile.d.ts testing/proto/profile.js"
   },
   "homepage": "https://github.com/DataDog/pprof-format#readme",
