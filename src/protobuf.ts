@@ -23,7 +23,7 @@ export const kTypeFixed64 = 1
 export const kTypeLengthDelim = 2
 export const kTypeFixed32 = 5
 
-// Buffer.from(string, 'utf8') is faster, when available
+// Prefer Buffer.from for speed; use TextEncoder in browsers.
 export const toUtf8 = typeof Buffer === 'undefined'
   ? (value: string) => new TextEncoder().encode(value)
   : (value: string) => Buffer.from(value, 'utf8')
