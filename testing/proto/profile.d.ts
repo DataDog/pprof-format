@@ -50,6 +50,9 @@ export namespace perftools {
 
             /** Profile defaultSampleType */
             defaultSampleType?: (number|Long|null);
+
+            /** Profile docUrl */
+            docUrl?: (number|Long|null);
         }
 
         /** Represents a Profile. */
@@ -102,6 +105,9 @@ export namespace perftools {
 
             /** Profile defaultSampleType. */
             public defaultSampleType: (number|Long);
+
+            /** Profile docUrl. */
+            public docUrl: (number|Long);
 
             /**
              * Creates a new Profile instance using the specified properties.
@@ -788,6 +794,9 @@ export namespace perftools {
 
             /** Line line */
             line?: (number|Long|null);
+
+            /** Line column */
+            column?: (number|Long|null);
         }
 
         /** Represents a Line. */
@@ -804,6 +813,9 @@ export namespace perftools {
 
             /** Line line. */
             public line: (number|Long);
+
+            /** Line column. */
+            public column: (number|Long);
 
             /**
              * Creates a new Line instance using the specified properties.

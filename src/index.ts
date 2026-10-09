@@ -701,11 +701,13 @@ export class Mapping {
 export type LineInput = {
   functionId?: Numeric
   line?: Numeric
+  column?: Numeric
 }
 
 export class Line {
   functionId: Numeric
   line: Numeric
+  column: Numeric
 
   static create(data: LineInput): Line {
     return data instanceof Line ? data : new Line(data)
@@ -714,12 +716,14 @@ export class Line {
   constructor(data: LineInput) {
     this.functionId = data.functionId || 0
     this.line = data.line || 0
+    this.column = data.column || 0
   }
 
   get length() {
     let total = 0
     total += measureNumberField(this.functionId)
     total += measureNumberField(this.line)
+    total += measureNumberField(this.column)
     return total
   }
 
@@ -732,6 +736,11 @@ export class Line {
     if (this.line) {
       buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
       offset = encodeNumber(buffer, offset, this.line)
+    }
+
+    if (this.column) {
+      buffer[offset++] = 24 // (3 << 3) + kTypeVarInt
+      offset = encodeNumber(buffer, offset, this.column)
     }
 
     return offset
@@ -749,6 +758,9 @@ export class Line {
         break
       case 2:
         data.line = decodeNumber(buffer)
+        break
+      case 3:
+        data.column = decodeNumber(buffer)
         break
     }
   }
@@ -958,6 +970,7 @@ export type ProfileInput = {
   period?: Numeric
   comment?: Array<Numeric>
   defaultSampleType?: Numeric
+  docUrl?: Numeric
 }
 
 export class Profile {
@@ -975,6 +988,7 @@ export class Profile {
   period: Numeric
   comment: Array<Numeric>
   defaultSampleType: Numeric
+  docUrl: Numeric
 
   constructor(data: ProfileInput = {}) {
     this.sampleType = (data.sampleType || []).map(ValueType.create)
@@ -991,6 +1005,7 @@ export class Profile {
     this.period = data.period || 0
     this.comment = data.comment || []
     this.defaultSampleType = data.defaultSampleType || 0
+    this.docUrl = data.docUrl || 0
   }
 
   get length() {
@@ -1009,6 +1024,7 @@ export class Profile {
     total += measureNumberField(this.period)
     total += measureNumberArrayField(this.comment)
     total += measureNumberField(this.defaultSampleType)
+    total += measureNumberField(this.docUrl)
     return total
   }
 
@@ -1100,6 +1116,11 @@ export class Profile {
     if (this.defaultSampleType) {
       buffer[offset++] = 112 // (14 << 3) + kTypeVarInt
       offset = encodeNumber(buffer, offset, this.defaultSampleType)
+    }
+
+    if (this.docUrl) {
+      buffer[offset++] = 120 // (15 << 3) + kTypeVarInt
+      offset = encodeNumber(buffer, offset, this.docUrl)
     }
 
     return offset
@@ -1196,6 +1217,9 @@ export class Profile {
         break
       case 14:
         data.defaultSampleType = decodeNumber(buffer)
+        break
+      case 15:
+        data.docUrl = decodeNumber(buffer)
         break
     }
   }
