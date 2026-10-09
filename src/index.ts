@@ -29,8 +29,8 @@ function countNumberBytes(buffer: Uint8Array): number {
   return i
 }
 
-function decodeBigNumber(buffer: Uint8Array): bigint {
-  if (!buffer.length) return BigInt(0)
+function decodeBigNumber(buffer: Uint8Array, start = 0): bigint {
+  if (start >= buffer.length) return BigInt(0)
   // The low 4 bytes hold 28 bits and the rest at most 42, so both fit in a
   // Number exactly
   let lo = 0
@@ -38,7 +38,7 @@ function decodeBigNumber(buffer: Uint8Array): bigint {
   let i = 0
   let byte
   do {
-    byte = buffer[i]
+    byte = buffer[start + i]
     if (i < 4) {
       lo |= (byte & 0b01111111) << (7 * i)
     } else {
@@ -128,7 +128,15 @@ function decodeNumbers(buffer: Uint8Array): Array<Numeric> {
 
   for (let i = 0; i < buffer.length; i++) {
     if ((buffer[i] & 0b10000000) === 0) {
-      values.push(decodeNumber(buffer.subarray(start, i + 1)))
+      if (i - start >= 4) {
+        values.push(decodeBigNumber(buffer, start))
+      } else {
+        let value = 0
+        for (let j = start; j <= i; j++) {
+          value |= (buffer[j] & 0b01111111) << (7 * (j - start))
+        }
+        values.push(value)
+      }
       start = i + 1
     }
   }
