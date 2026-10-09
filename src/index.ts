@@ -46,6 +46,7 @@ function decodeBigNumber(buffer: Uint8Array, start = 0): bigint {
     }
     i++
   } while (byte >= 0b10000000)
+  if (hi < 2 ** 25) return BigInt(hi * 2 ** 28 + lo)
   return (BigInt(hi) << 28n) | BigInt(lo)
 }
 
