@@ -115,9 +115,11 @@ function decodeNumbers(buffer: Uint8Array): Array<Numeric> {
 
   for (let i = 0; i < buffer.length; i++) {
     if ((buffer[i] & 0b10000000) === 0) {
-      values.push(i - start >= 4
-        ? decodeBigNumber(buffer, start)
-        : decodeSmallNumber(buffer, start, i + 1))
+      if (i - start >= 4) {
+        values.push(decodeBigNumber(buffer, start))
+      } else {
+        values.push(decodeSmallNumber(buffer, start, i + 1))
+      }
       start = i + 1
     }
   }
