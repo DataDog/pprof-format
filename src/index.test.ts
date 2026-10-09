@@ -316,6 +316,22 @@ test('Profile', async (t) => {
         'has expected encoding of full object'
       )
     })
+
+    await t.test('without setImmediate (browsers)', async () => {
+      const { setImmediate } = globalThis
+      // @ts-expect-error simulating an environment without setImmediate
+      delete globalThis.setImmediate
+      try {
+        const fun = new Profile(profileData)
+        assert.strictEqual(
+          bufToHex(await fun.encodeAsync()),
+          fullEncoding(profileEncodings),
+          'has expected encoding of full object'
+        )
+      } finally {
+        globalThis.setImmediate = setImmediate
+      }
+    })
   })
 })
 
