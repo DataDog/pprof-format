@@ -50,27 +50,13 @@ function decodeBigNumber(buffer: Uint8Array, start = 0): bigint {
   return (BigInt(hi) << 28n) | BigInt(lo)
 }
 
-function makeValue(value: Uint8Array, offset = 0) {
-  return { value, offset }
-}
-
-function getValue(mode: number, buffer: Uint8Array) {
-  switch (mode) {
-    case kTypeVarInt:
-      for (let i = 0; i < buffer.length; i++) {
-        if (!(buffer[i] & 0b10000000)) {
-          return makeValue(buffer.subarray(0, i + 1))
-        }
-      }
-      return makeValue(buffer)
-    case kTypeLengthDelim: {
-      const offset = countNumberBytes(buffer)
-      const size = decodeNumber(buffer)
-      return makeValue(buffer.subarray(offset, Number(size) + offset), offset)
-    }
-    default:
-      throw new Error(`Unrecognized value type: ${mode}`)
+// Decodes a varint of at most 4 bytes spanning buffer[start..end)
+function decodeSmallNumber(buffer: Uint8Array, start: number, end: number): number {
+  let value = 0
+  for (let i = start; i < end; i++) {
+    value |= (buffer[i] & 0b01111111) << (7 * (i - start))
   }
+  return value
 }
 
 function lowBits(number: Numeric): number {
@@ -129,15 +115,9 @@ function decodeNumbers(buffer: Uint8Array): Array<Numeric> {
 
   for (let i = 0; i < buffer.length; i++) {
     if ((buffer[i] & 0b10000000) === 0) {
-      if (i - start >= 4) {
-        values.push(decodeBigNumber(buffer, start))
-      } else {
-        let value = 0
-        for (let j = start; j <= i; j++) {
-          value |= (buffer[j] & 0b01111111) << (7 * (j - start))
-        }
-        values.push(value)
-      }
+      values.push(i - start >= 4
+        ? decodeBigNumber(buffer, start)
+        : decodeSmallNumber(buffer, start, i + 1))
       start = i + 1
     }
   }
@@ -339,10 +319,26 @@ function decode<T>(
     const mode = buffer[index] & 0b111
     index++
 
-    const { offset, value } = getValue(mode, buffer.subarray(index))
-    index += value.length + offset
+    let start = index
+    let end = index
+    switch (mode) {
+      case kTypeVarInt:
+        while (end < buffer.length && buffer[end++] >= 0b10000000);
+        break
+      case kTypeLengthDelim: {
+        while (start < buffer.length && buffer[start++] >= 0b10000000);
+        const size = start - index > 4
+          ? Number(decodeBigNumber(buffer, index))
+          : decodeSmallNumber(buffer, index, start)
+        end = start + size
+        break
+      }
+      default:
+        throw new Error(`Unrecognized value type: ${mode}`)
+    }
 
-    decoder(data, field, value)
+    decoder(data, field, buffer.subarray(start, end))
+    index = end
   }
 
   return data
