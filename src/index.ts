@@ -31,12 +31,22 @@ function countNumberBytes(buffer: Uint8Array): number {
 
 function decodeBigNumber(buffer: Uint8Array): bigint {
   if (!buffer.length) return BigInt(0)
-  let value = BigInt(buffer[0] & 0b01111111)
+  // The low 4 bytes hold 28 bits and the rest at most 42, so both fit in a
+  // Number exactly
+  let lo = 0
+  let hi = 0
   let i = 0
-  while (buffer[i++] >= 0b10000000) {
-    value |= BigInt(buffer[i] & 0b01111111) << BigInt(7 * i)
-  }
-  return value
+  let byte
+  do {
+    byte = buffer[i]
+    if (i < 4) {
+      lo |= (byte & 0b01111111) << (7 * i)
+    } else {
+      hi += (byte & 0b01111111) * 2 ** (7 * (i - 4))
+    }
+    i++
+  } while (byte >= 0b10000000)
+  return (BigInt(hi) << 28n) | BigInt(lo)
 }
 
 function makeValue(value: Uint8Array, offset = 0) {
