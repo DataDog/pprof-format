@@ -22,13 +22,6 @@ type DeepPartial<T> = {
   [P in keyof T]?: DeepPartial<T[P]>
 }
 
-function countNumberBytes(buffer: Uint8Array): number {
-  if (!buffer.length) return 0
-  let i = 0
-  while (i < buffer.length && buffer[i++] >= 0b10000000);
-  return i
-}
-
 function decodeBigNumber(buffer: Uint8Array, start = 0): bigint {
   if (start >= buffer.length) return BigInt(0)
   // The low 4 bytes hold 28 bits and the rest at most 42, so both fit in a
@@ -96,24 +89,17 @@ function long(number: Numeric): Array<number> {
 const kTypeVarInt = 0
 const kTypeLengthDelim = 2
 
-function decodeNumber(buffer: Uint8Array): Numeric {
-  const size = countNumberBytes(buffer)
-  if (size > 4) return decodeBigNumber(buffer)
-  if (!buffer.length) return 0
-
-  let value = buffer[0] & 0b01111111
-  let i = 0
-  while (buffer[i++] >= 0b10000000) {
-    value |= (buffer[i] & 0b01111111) << (7 * i)
-  }
-  return value
+// Decodes the varint spanning buffer[start..end)
+function decodeNumber(buffer: Uint8Array, start = 0, end = buffer.length): Numeric {
+  if (end - start > 4) return decodeBigNumber(buffer, start)
+  return decodeSmallNumber(buffer, start, end)
 }
 
-function decodeNumbers(buffer: Uint8Array): Array<Numeric> {
+function decodeNumbers(buffer: Uint8Array, from = 0, to = buffer.length): Array<Numeric> {
   const values = []
-  let start = 0
+  let start = from
 
-  for (let i = 0; i < buffer.length; i++) {
+  for (let i = from; i < to; i++) {
     if ((buffer[i] & 0b10000000) === 0) {
       if (i - start >= 4) {
         values.push(decodeBigNumber(buffer, start))
@@ -311,12 +297,14 @@ export class StringTable {
 
 function decode<T>(
   buffer: Uint8Array,
-  decoder: (data: any, field: number, value: Uint8Array) => void
+  decoder: (data: any, field: number, buffer: Uint8Array, start: number, end: number) => void,
+  from: number,
+  to: number
 ): DeepPartial<T> {
   const data: any = {}
-  let index = 0
+  let index = from
 
-  while (index < buffer.length) {
+  while (index < to) {
     const field = buffer[index] >> 3
     const mode = buffer[index] & 0b111
     index++
@@ -325,21 +313,21 @@ function decode<T>(
     let end = index
     switch (mode) {
       case kTypeVarInt:
-        while (end < buffer.length && buffer[end++] >= 0b10000000);
+        while (end < to && buffer[end++] >= 0b10000000);
         break
       case kTypeLengthDelim: {
-        while (start < buffer.length && buffer[start++] >= 0b10000000);
+        while (start < to && buffer[start++] >= 0b10000000);
         const size = start - index > 4
           ? Number(decodeBigNumber(buffer, index))
           : decodeSmallNumber(buffer, index, start)
-        end = start + size
+        end = Math.min(start + size, to)
         break
       }
       default:
         throw new Error(`Unrecognized value type: ${mode}`)
     }
 
-    decoder(data, field, buffer.subarray(start, end))
+    decoder(data, field, buffer, start, end)
     index = end
   }
 
@@ -390,19 +378,19 @@ export class ValueType {
     return buffer
   }
 
-  static decodeValue(data: ValueTypeInput, field: number, buffer: Uint8Array) {
+  static decodeValue(data: ValueTypeInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
     switch (field) {
       case 1:
-        data.type = decodeNumber(buffer)
+        data.type = decodeNumber(buffer, start, end)
         break
       case 2:
-        data.unit = decodeNumber(buffer)
+        data.unit = decodeNumber(buffer, start, end)
         break
     }
   }
 
-  static decode(buffer: Uint8Array): ValueType {
-    return new this(decode(buffer, this.decodeValue) as ValueTypeInput)
+  static decode(buffer: Uint8Array, start = 0, end = buffer.length): ValueType {
+    return new this(decode(buffer, this.decodeValue, start, end) as ValueTypeInput)
   }
 }
 
@@ -468,25 +456,25 @@ export class Label {
     return buffer
   }
 
-  static decodeValue(data: LabelInput, field: number, buffer: Uint8Array) {
+  static decodeValue(data: LabelInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
     switch (field) {
       case 1:
-        data.key = decodeNumber(buffer)
+        data.key = decodeNumber(buffer, start, end)
         break
       case 2:
-        data.str = decodeNumber(buffer)
+        data.str = decodeNumber(buffer, start, end)
         break
       case 3:
-        data.num = decodeNumber(buffer)
+        data.num = decodeNumber(buffer, start, end)
         break
       case 4:
-        data.numUnit = decodeNumber(buffer)
+        data.numUnit = decodeNumber(buffer, start, end)
         break
     }
   }
 
-  static decode(buffer: Uint8Array): Label {
-    return new this(decode(buffer, this.decodeValue) as LabelInput)
+  static decode(buffer: Uint8Array, start = 0, end = buffer.length): Label {
+    return new this(decode(buffer, this.decodeValue, start, end) as LabelInput)
   }
 }
 
@@ -550,22 +538,22 @@ export class Sample {
     return buffer
   }
 
-  static decodeValue(data: SampleInput, field: number, buffer: Uint8Array) {
+  static decodeValue(data: SampleInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
     switch (field) {
       case 1:
-        data.locationId = pushAll(decodeNumbers(buffer), data.locationId)
+        data.locationId = pushAll(decodeNumbers(buffer, start, end), data.locationId)
         break
       case 2:
-        data.value = pushAll(decodeNumbers(buffer), data.value)
+        data.value = pushAll(decodeNumbers(buffer, start, end), data.value)
         break
       case 3:
-        data.label = push(Label.decode(buffer), data.label)
+        data.label = push(Label.decode(buffer, start, end), data.label)
         break
     }
   }
 
-  static decode(buffer: Uint8Array): Sample {
-    return new this(decode(buffer, this.decodeValue) as SampleInput)
+  static decode(buffer: Uint8Array, start = 0, end = buffer.length): Sample {
+    return new this(decode(buffer, this.decodeValue, start, end) as SampleInput)
   }
 }
 
@@ -675,43 +663,43 @@ export class Mapping {
     return buffer
   }
 
-  static decodeValue(data: MappingInput, field: number, buffer: Uint8Array) {
+  static decodeValue(data: MappingInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
     switch (field) {
       case 1:
-        data.id = decodeNumber(buffer)
+        data.id = decodeNumber(buffer, start, end)
         break
       case 2:
-        data.memoryStart = decodeNumber(buffer)
+        data.memoryStart = decodeNumber(buffer, start, end)
         break
       case 3:
-        data.memoryLimit = decodeNumber(buffer)
+        data.memoryLimit = decodeNumber(buffer, start, end)
         break
       case 4:
-        data.fileOffset = decodeNumber(buffer)
+        data.fileOffset = decodeNumber(buffer, start, end)
         break
       case 5:
-        data.filename = decodeNumber(buffer)
+        data.filename = decodeNumber(buffer, start, end)
         break
       case 6:
-        data.buildId = decodeNumber(buffer)
+        data.buildId = decodeNumber(buffer, start, end)
         break
       case 7:
-        data.hasFunctions = !!decodeNumber(buffer)
+        data.hasFunctions = !!decodeNumber(buffer, start, end)
         break
       case 8:
-        data.hasFilenames = !!decodeNumber(buffer)
+        data.hasFilenames = !!decodeNumber(buffer, start, end)
         break
       case 9:
-        data.hasLineNumbers = !!decodeNumber(buffer)
+        data.hasLineNumbers = !!decodeNumber(buffer, start, end)
         break
       case 10:
-        data.hasInlineFrames = !!decodeNumber(buffer)
+        data.hasInlineFrames = !!decodeNumber(buffer, start, end)
         break
     }
   }
 
-  static decode(buffer: Uint8Array): Mapping {
-    return new this(decode(buffer, this.decodeValue) as MappingInput)
+  static decode(buffer: Uint8Array, start = 0, end = buffer.length): Mapping {
+    return new this(decode(buffer, this.decodeValue, start, end) as MappingInput)
   }
 }
 
@@ -768,22 +756,22 @@ export class Line {
     return buffer
   }
 
-  static decodeValue(data: LineInput, field: number, buffer: Uint8Array) {
+  static decodeValue(data: LineInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
     switch (field) {
       case 1:
-        data.functionId = decodeNumber(buffer)
+        data.functionId = decodeNumber(buffer, start, end)
         break
       case 2:
-        data.line = decodeNumber(buffer)
+        data.line = decodeNumber(buffer, start, end)
         break
       case 3:
-        data.column = decodeNumber(buffer)
+        data.column = decodeNumber(buffer, start, end)
         break
     }
   }
 
-  static decode(buffer: Uint8Array): Line {
-    return new this(decode(buffer, this.decodeValue) as LineInput)
+  static decode(buffer: Uint8Array, start = 0, end = buffer.length): Line {
+    return new this(decode(buffer, this.decodeValue, start, end) as LineInput)
   }
 }
 
@@ -855,28 +843,28 @@ export class Location {
     return buffer
   }
 
-  static decodeValue(data: LocationInput, field: number, buffer: Uint8Array) {
+  static decodeValue(data: LocationInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
     switch (field) {
       case 1:
-        data.id = decodeNumber(buffer)
+        data.id = decodeNumber(buffer, start, end)
         break
       case 2:
-        data.mappingId = decodeNumber(buffer)
+        data.mappingId = decodeNumber(buffer, start, end)
         break
       case 3:
-        data.address = decodeNumber(buffer)
+        data.address = decodeNumber(buffer, start, end)
         break
       case 4:
-        data.line = push(Line.decode(buffer), data.line)
+        data.line = push(Line.decode(buffer, start, end), data.line)
         break
       case 5:
-        data.isFolded = !!decodeNumber(buffer)
+        data.isFolded = !!decodeNumber(buffer, start, end)
         break
     }
   }
 
-  static decode(buffer: Uint8Array): Location {
-    return new this(decode(buffer, this.decodeValue) as LocationInput)
+  static decode(buffer: Uint8Array, start = 0, end = buffer.length): Location {
+    return new this(decode(buffer, this.decodeValue, start, end) as LocationInput)
   }
 }
 
@@ -947,28 +935,28 @@ export class Function {
     return buffer
   }
 
-  static decodeValue(data: FunctionInput, field: number, buffer: Uint8Array) {
+  static decodeValue(data: FunctionInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
     switch (field) {
       case 1:
-        data.id = decodeNumber(buffer)
+        data.id = decodeNumber(buffer, start, end)
         break
       case 2:
-        data.name = decodeNumber(buffer)
+        data.name = decodeNumber(buffer, start, end)
         break
       case 3:
-        data.systemName = decodeNumber(buffer)
+        data.systemName = decodeNumber(buffer, start, end)
         break
       case 4:
-        data.filename = decodeNumber(buffer)
+        data.filename = decodeNumber(buffer, start, end)
         break
       case 5:
-        data.startLine = decodeNumber(buffer)
+        data.startLine = decodeNumber(buffer, start, end)
         break
     }
   }
 
-  static decode(buffer: Uint8Array): Function {
-    return new this(decode(buffer, this.decodeValue) as FunctionInput)
+  static decode(buffer: Uint8Array, start = 0, end = buffer.length): Function {
+    return new this(decode(buffer, this.decodeValue, start, end) as FunctionInput)
   }
 }
 
@@ -1187,61 +1175,61 @@ export class Profile {
     return buffer
   }
 
-  static decodeValue(data: ProfileInput, field: number, buffer: Uint8Array) {
+  static decodeValue(data: ProfileInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
     switch (field) {
       case 1:
-        data.sampleType = push(ValueType.decode(buffer), data.sampleType)
+        data.sampleType = push(ValueType.decode(buffer, start, end), data.sampleType)
         break
       case 2:
-        data.sample = push(Sample.decode(buffer), data.sample)
+        data.sample = push(Sample.decode(buffer, start, end), data.sample)
         break
       case 3:
-        data.mapping = push(Mapping.decode(buffer), data.mapping)
+        data.mapping = push(Mapping.decode(buffer, start, end), data.mapping)
         break
       case 4:
-        data.location = push(Location.decode(buffer), data.location)
+        data.location = push(Location.decode(buffer, start, end), data.location)
         break
       case 5:
-        data.function = push(Function.decode(buffer), data.function)
+        data.function = push(Function.decode(buffer, start, end), data.function)
         break
       case 6: {
         if (data.stringTable === undefined) {
           data.stringTable = new StringTable(emptyTableToken)
         }
-        data.stringTable._decodeString(buffer)
+        data.stringTable._decodeString(buffer.subarray(start, end))
         break
       }
       case 7:
-        data.dropFrames = decodeNumber(buffer)
+        data.dropFrames = decodeNumber(buffer, start, end)
         break
       case 8:
-        data.keepFrames = decodeNumber(buffer)
+        data.keepFrames = decodeNumber(buffer, start, end)
         break
       case 9:
-        data.timeNanos = decodeNumber(buffer)
+        data.timeNanos = decodeNumber(buffer, start, end)
         break
       case 10:
-        data.durationNanos = decodeNumber(buffer)
+        data.durationNanos = decodeNumber(buffer, start, end)
         break
       case 11:
-        data.periodType = ValueType.decode(buffer)
+        data.periodType = ValueType.decode(buffer, start, end)
         break
       case 12:
-        data.period = decodeNumber(buffer)
+        data.period = decodeNumber(buffer, start, end)
         break
       case 13:
-        data.comment = pushAll(decodeNumbers(buffer), data.comment)
+        data.comment = pushAll(decodeNumbers(buffer, start, end), data.comment)
         break
       case 14:
-        data.defaultSampleType = decodeNumber(buffer)
+        data.defaultSampleType = decodeNumber(buffer, start, end)
         break
       case 15:
-        data.docUrl = decodeNumber(buffer)
+        data.docUrl = decodeNumber(buffer, start, end)
         break
     }
   }
 
-  static decode(buffer: Uint8Array): Profile {
-    return new this(decode(buffer, this.decodeValue) as ProfileInput)
+  static decode(buffer: Uint8Array, start = 0, end = buffer.length): Profile {
+    return new this(decode(buffer, this.decodeValue, start, end) as ProfileInput)
   }
 }
