@@ -356,6 +356,28 @@ test('Profile docUrl', async (t) => {
   })
 })
 
+test('decoding a byte range', async (t) => {
+  await t.test('ignores bytes outside the range', () => {
+    const label = '08041005187b2006'
+    const buffer = hexToBuf(`ffff${label}ffff`)
+
+    const decoded = Label.decode(buffer, 2, 10)
+
+    assert.deepStrictEqual({ ...decoded }, { ...new Label(labelData) })
+  })
+
+  await t.test('truncates a nested message that extends past the range', () => {
+    const lineDeclaring4Bytes = '2204'
+    const functionId123 = '087b'
+    const line5 = '1005'
+    const buffer = hexToBuf(`${lineDeclaring4Bytes}${functionId123}${line5}`)
+
+    const decoded = Location.decode(buffer, 0, 4)
+
+    assert.deepStrictEqual({ ...decoded.line[0] }, { ...new Line({ functionId: 123 }) })
+  })
+})
+
 function encodeStringTable(strings: StringTable) {
   return strings.strings.map(s => {
     const buf = new TextEncoder().encode(s)
