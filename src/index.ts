@@ -38,6 +38,7 @@ function decodeBigNumber(buffer: Uint8Array, start = 0): bigint {
   // Number exactly
   let lo = 0
   let hi = 0
+  let fac = 1
   let i = 0
   let byte
   do {
@@ -45,7 +46,8 @@ function decodeBigNumber(buffer: Uint8Array, start = 0): bigint {
     if (i < 4) {
       lo |= (byte & 0b01111111) << (7 * i)
     } else {
-      hi += (byte & 0b01111111) * 2 ** (7 * (i - 4))
+      hi += (byte & 0b01111111) * fac
+      fac *= 128
     }
     i++
   } while (byte >= 0b10000000)
