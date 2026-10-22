@@ -167,6 +167,54 @@ test('message fields', async (t) => {
     assert.ok(decoded.periodType instanceof ValueType)
   })
 
+  await t.test('leaves no state on encoded messages', () => {
+    const encoded = new Profile({ sample: [new Sample({ value: [1], label: [new Label({ key: 1 })] })] })
+    encoded.encode()
+    assert.strictEqual(encoded.length, encoded.encode().length)
+    const fresh = new Profile({ sample: [new Sample({ value: [1], label: [new Label({ key: 1 })] })] })
+    assert.deepStrictEqual(encoded.sample, fresh.sample)
+    assert.deepStrictEqual({ ...encoded.sample[0] }, { ...fresh.sample[0] })
+  })
+
+  await t.test('keeps the lengths of interleaved encodes apart', async () => {
+    const profile = (samples: number) => new Profile({
+      sample: Array.from({ length: samples }, (_, i) => new Sample({
+        locationId: [i + 1, 300 + i],
+        value: [i],
+        label: [new Label({ key: 1, num: 1000 * i })]
+      })),
+      periodType: new ValueType({ type: 1, unit: 2 })
+    })
+    const a = profile(3)
+    const b = profile(40)
+    const c = profile(7)
+    const expected = [a, b, c].map(p => hex(p.encode()))
+    const pending = Promise.all([a.encodeAsync(), b.encodeAsync()])
+    // Encode synchronously while both async encodes are pending.
+    assert.strictEqual(hex(c.encode()), expected[2])
+    const [encodedA, encodedB] = await pending
+    assert.deepStrictEqual([hex(encodedA), hex(encodedB)], expected.slice(0, 2))
+  })
+
+  await t.test('measures each submessage once per encode', async () => {
+    const measure = Label.prototype._measure
+    let calls = 0
+    Label.prototype._measure = function (this: Label) {
+      calls++
+      return measure.call(this)
+    }
+    try {
+      const profile = new Profile({ sample: [new Sample({ label: [new Label({ key: 1 }), new Label({ key: 2 })] })] })
+      profile.encode()
+      assert.strictEqual(calls, 2, 'encode()')
+      calls = 0
+      await profile.encodeAsync()
+      assert.strictEqual(calls, 2, 'encodeAsync()')
+    } finally {
+      Label.prototype._measure = measure
+    }
+  })
+
   await t.test('re-measures after mutation', () => {
     const sample = new Sample({ value: [1] })
     const profile = new Profile({ sample: [sample] })
