@@ -16,6 +16,9 @@ import {
   encodeNumber,
   encodeNumberField,
   encodePackedNumbersField,
+  isLengthDelim,
+  isPackedOrVarInt,
+  isVarInt,
   kTypeLengthDelim,
   measureBoolField,
   measureMessageArrayField,
@@ -148,13 +151,13 @@ export class ValueType extends Message {
     return offset
   }
 
-  static decodeValue(data: ValueTypeInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: ValueTypeInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
       case 1:
-        data.type = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.type = decodeNumber(buffer, start, end)
         break
       case 2:
-        data.unit = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.unit = decodeNumber(buffer, start, end)
         break
     }
   }
@@ -206,19 +209,19 @@ export class Label extends Message {
     return offset
   }
 
-  static decodeValue(data: LabelInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: LabelInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
       case 1:
-        data.key = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.key = decodeNumber(buffer, start, end)
         break
       case 2:
-        data.str = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.str = decodeNumber(buffer, start, end)
         break
       case 3:
-        data.num = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.num = decodeNumber(buffer, start, end)
         break
       case 4:
-        data.numUnit = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.numUnit = decodeNumber(buffer, start, end)
         break
     }
   }
@@ -265,16 +268,16 @@ export class Sample extends Message {
     return offset
   }
 
-  static decodeValue(data: SampleInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: SampleInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
       case 1:
-        data.locationId = pushAll(decodeNumbers(buffer, start, end), data.locationId)
+        if (isPackedOrVarInt(wireType)) data.locationId = pushAll(decodeNumbers(buffer, start, end), data.locationId)
         break
       case 2:
-        data.value = pushAll(decodeNumbers(buffer, start, end), data.value)
+        if (isPackedOrVarInt(wireType)) data.value = pushAll(decodeNumbers(buffer, start, end), data.value)
         break
       case 3:
-        data.label = push(Label.decode(buffer, start, end), data.label)
+        if (isLengthDelim(wireType)) data.label = push(Label.decode(buffer, start, end), data.label)
         break
     }
   }
@@ -356,37 +359,37 @@ export class Mapping extends Message {
     return offset
   }
 
-  static decodeValue(data: MappingInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: MappingInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
       case 1:
-        data.id = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.id = decodeNumber(buffer, start, end)
         break
       case 2:
-        data.memoryStart = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.memoryStart = decodeNumber(buffer, start, end)
         break
       case 3:
-        data.memoryLimit = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.memoryLimit = decodeNumber(buffer, start, end)
         break
       case 4:
-        data.fileOffset = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.fileOffset = decodeNumber(buffer, start, end)
         break
       case 5:
-        data.filename = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.filename = decodeNumber(buffer, start, end)
         break
       case 6:
-        data.buildId = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.buildId = decodeNumber(buffer, start, end)
         break
       case 7:
-        data.hasFunctions = !!decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.hasFunctions = !!decodeNumber(buffer, start, end)
         break
       case 8:
-        data.hasFilenames = !!decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.hasFilenames = !!decodeNumber(buffer, start, end)
         break
       case 9:
-        data.hasLineNumbers = !!decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.hasLineNumbers = !!decodeNumber(buffer, start, end)
         break
       case 10:
-        data.hasInlineFrames = !!decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.hasInlineFrames = !!decodeNumber(buffer, start, end)
         break
     }
   }
@@ -433,16 +436,16 @@ export class Line extends Message {
     return offset
   }
 
-  static decodeValue(data: LineInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: LineInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
       case 1:
-        data.functionId = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.functionId = decodeNumber(buffer, start, end)
         break
       case 2:
-        data.line = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.line = decodeNumber(buffer, start, end)
         break
       case 3:
-        data.column = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.column = decodeNumber(buffer, start, end)
         break
     }
   }
@@ -499,22 +502,22 @@ export class Location extends Message {
     return offset
   }
 
-  static decodeValue(data: LocationInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: LocationInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
       case 1:
-        data.id = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.id = decodeNumber(buffer, start, end)
         break
       case 2:
-        data.mappingId = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.mappingId = decodeNumber(buffer, start, end)
         break
       case 3:
-        data.address = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.address = decodeNumber(buffer, start, end)
         break
       case 4:
-        data.line = push(Line.decode(buffer, start, end), data.line)
+        if (isLengthDelim(wireType)) data.line = push(Line.decode(buffer, start, end), data.line)
         break
       case 5:
-        data.isFolded = !!decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.isFolded = !!decodeNumber(buffer, start, end)
         break
     }
   }
@@ -571,22 +574,22 @@ export class Function extends Message {
     return offset
   }
 
-  static decodeValue(data: FunctionInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: FunctionInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
       case 1:
-        data.id = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.id = decodeNumber(buffer, start, end)
         break
       case 2:
-        data.name = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.name = decodeNumber(buffer, start, end)
         break
       case 3:
-        data.systemName = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.systemName = decodeNumber(buffer, start, end)
         break
       case 4:
-        data.filename = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.filename = decodeNumber(buffer, start, end)
         break
       case 5:
-        data.startLine = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.startLine = decodeNumber(buffer, start, end)
         break
     }
   }
@@ -745,24 +748,25 @@ export class Profile extends Message {
     return buffer
   }
 
-  static decodeValue(data: ProfileInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: ProfileInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
       case 1:
-        data.sampleType = push(ValueType.decode(buffer, start, end), data.sampleType)
+        if (isLengthDelim(wireType)) data.sampleType = push(ValueType.decode(buffer, start, end), data.sampleType)
         break
       case 2:
-        data.sample = push(Sample.decode(buffer, start, end), data.sample)
+        if (isLengthDelim(wireType)) data.sample = push(Sample.decode(buffer, start, end), data.sample)
         break
       case 3:
-        data.mapping = push(Mapping.decode(buffer, start, end), data.mapping)
+        if (isLengthDelim(wireType)) data.mapping = push(Mapping.decode(buffer, start, end), data.mapping)
         break
       case 4:
-        data.location = push(Location.decode(buffer, start, end), data.location)
+        if (isLengthDelim(wireType)) data.location = push(Location.decode(buffer, start, end), data.location)
         break
       case 5:
-        data.function = push(Function.decode(buffer, start, end), data.function)
+        if (isLengthDelim(wireType)) data.function = push(Function.decode(buffer, start, end), data.function)
         break
       case 6: {
+        if (!isLengthDelim(wireType)) break
         if (data.stringTable === undefined) {
           data.stringTable = new StringTable(emptyTableToken)
         }
@@ -770,31 +774,31 @@ export class Profile extends Message {
         break
       }
       case 7:
-        data.dropFrames = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.dropFrames = decodeNumber(buffer, start, end)
         break
       case 8:
-        data.keepFrames = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.keepFrames = decodeNumber(buffer, start, end)
         break
       case 9:
-        data.timeNanos = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.timeNanos = decodeNumber(buffer, start, end)
         break
       case 10:
-        data.durationNanos = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.durationNanos = decodeNumber(buffer, start, end)
         break
       case 11:
-        data.periodType = ValueType.decode(buffer, start, end)
+        if (isLengthDelim(wireType)) data.periodType = ValueType.decode(buffer, start, end)
         break
       case 12:
-        data.period = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.period = decodeNumber(buffer, start, end)
         break
       case 13:
-        data.comment = pushAll(decodeNumbers(buffer, start, end), data.comment)
+        if (isPackedOrVarInt(wireType)) data.comment = pushAll(decodeNumbers(buffer, start, end), data.comment)
         break
       case 14:
-        data.defaultSampleType = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.defaultSampleType = decodeNumber(buffer, start, end)
         break
       case 15:
-        data.docUrl = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.docUrl = decodeNumber(buffer, start, end)
         break
     }
   }

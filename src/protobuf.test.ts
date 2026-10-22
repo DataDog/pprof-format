@@ -32,7 +32,7 @@ import {
   measureNumberField,
   measurePackedFixed64Field
 } from './protobuf.js'
-import { Profile, Sample, StringTable, ValueType } from './index.js'
+import { Label, LabelInput, Profile, Sample, StringTable, ValueType } from './index.js'
 
 function hex(buf: Uint8Array) {
   return Buffer.from(buf).toString('hex')
@@ -259,5 +259,35 @@ test('encoding checks', async (t) => {
     const encoding = profile.encodeAsync()
     profile.period = 300
     await assert.rejects(encoding, /Encoded \d+ bytes but measured \d+/)
+  })
+})
+
+test('decoders skip fields with mismatched wire types', async (t) => {
+  await t.test('varint field encoded as length-delimited', () => {
+    // key (field 1) as length-delimited, then str (field 2) as varint
+    const label = Label.decode(fromHex('0a0105' + '1007'))
+    assert.strictEqual(label.key, 0)
+    assert.strictEqual(label.str, 7)
+  })
+
+  await t.test('packed field encoded as fixed64', () => {
+    // locationId (field 1) as fixed64, then value (field 2) packed
+    const sample = Sample.decode(fromHex('09' + '0102030405060708' + '120107'))
+    assert.deepStrictEqual(sample.locationId, [])
+    assert.deepStrictEqual(sample.value, [7])
+  })
+
+  await t.test('message and string fields encoded as varints', () => {
+    // sample (field 2) and string_table (field 6) as varints, then period (field 12)
+    const profile = Profile.decode(fromHex('1005' + '3001' + '6007'))
+    assert.deepStrictEqual(profile.sample, [])
+    assert.deepStrictEqual(profile.stringTable.strings, [''])
+    assert.strictEqual(profile.period, 7)
+  })
+
+  await t.test('decodeValue without a wire type decodes as before', () => {
+    const data: LabelInput = {}
+    Label.decodeValue(data, 1, fromHex('05'))
+    assert.strictEqual(data.key, 5)
   })
 })

@@ -426,6 +426,24 @@ export function encodeMessageArrayField(buffer: Uint8Array, offset: number, fiel
   return offset
 }
 
+/*
+ * Skip mismatched wire types like unknown fields. Accept undefined for callers
+ * that omit the optional wire type when calling decodeValue directly.
+ */
+
+export function isVarInt(wireType: number | undefined): boolean {
+  return wireType === undefined || wireType === kTypeVarInt
+}
+
+export function isLengthDelim(wireType: number | undefined): boolean {
+  return wireType === undefined || wireType === kTypeLengthDelim
+}
+
+/** Accepts both packed and unpacked varints for repeated fields. */
+export function isPackedOrVarInt(wireType: number | undefined): boolean {
+  return isVarInt(wireType) || wireType === kTypeLengthDelim
+}
+
 /**
  * Decodes buffer[from..to), passing each field's number, value range and wire
  * type to the decoder. Ranges exclude length prefixes and are capped at `to`.
