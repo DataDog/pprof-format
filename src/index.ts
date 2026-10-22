@@ -315,9 +315,9 @@ function decode<T>(
   buffer: Uint8Array,
   decoder: (data: any, field: number, buffer: Uint8Array, start: number, end: number) => void,
   from: number,
-  to: number
+  to: number,
+  data: any = {}
 ): DeepPartial<T> {
-  const data: any = {}
   let index = from
 
   while (index < to) {
@@ -1228,7 +1228,10 @@ export class Profile {
         data.durationNanos = decodeNumber(buffer, start, end)
         break
       case 11:
-        data.periodType = ValueType.decode(buffer, start, end)
+        // Occurrences of a singular message field are merged
+        data.periodType = new ValueType(
+          decode(buffer, ValueType.decodeValue, start, end, { ...data.periodType }) as ValueTypeInput
+        )
         break
       case 12:
         data.period = decodeNumber(buffer, start, end)
