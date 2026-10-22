@@ -154,7 +154,7 @@ export function decodeFixed64s(buffer: Uint8Array, from = 0, to = buffer.length)
 }
 
 export function decodeDouble(buffer: Uint8Array, start = 0): number {
-  return new DataView(buffer.buffer, buffer.byteOffset + start, 8).getFloat64(0, true)
+  return new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength).getFloat64(start, true)
 }
 
 export function push<T>(value: T, list?: Array<T>): Array<T> {
@@ -368,14 +368,15 @@ export function encodePackedFixed64Field(buffer: Uint8Array, offset: number, fie
   return offset
 }
 
+// Only +0 is the default value of a double field; -0 and NaN are encoded.
 export function measureDoubleField(field: number, value: number): number {
-  return value ? measureTag(field) + 8 : 0
+  return Object.is(value, 0) ? 0 : measureTag(field) + 8
 }
 
 export function encodeDoubleField(buffer: Uint8Array, offset: number, field: number, value: number): number {
-  if (!value) return offset
+  if (Object.is(value, 0)) return offset
   offset = encodeTag(buffer, offset, field, kTypeFixed64)
-  new DataView(buffer.buffer, buffer.byteOffset + offset, 8).setFloat64(0, value, true)
+  new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength).setFloat64(offset, value, true)
   return offset + 8
 }
 
