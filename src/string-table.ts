@@ -5,6 +5,7 @@
  */
 
 import {
+  decodeString,
   encodeNumber,
   kTypeLengthDelim,
   measureNumber,
@@ -81,7 +82,7 @@ export class StringTable {
   }
 
   _decodeString(buffer: Uint8Array) {
-    const string = new TextDecoder().decode(buffer)
+    const string = decodeString(buffer)
     this.#positions.set(string, this.strings.push(string) - 1)
     this.#encodings.push(StringTable._encodeStringFromUtf8(buffer, this.#field))
   }

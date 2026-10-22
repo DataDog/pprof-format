@@ -11,7 +11,8 @@
     ],
     "exports": {
       "./package.json": "./package.json",
-      ".": "./src/index.ts"
+      ".": "./src/index.ts",
+      "./otel": "./src/otel.ts"
     }
   },
   "exports": {
@@ -25,6 +26,16 @@
         "types": "./dist/commonjs/index.d.ts",
         "default": "./dist/commonjs/index.js"
       }
+    },
+    "./otel": {
+      "import": {
+        "types": "./dist/esm/otel.d.ts",
+        "default": "./dist/esm/otel.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/otel.d.ts",
+        "default": "./dist/commonjs/otel.js"
+      }
     }
   },
   "main": "./dist/commonjs/index.js",
@@ -37,8 +48,9 @@
     "lint": "eslint src",
     "prepublishOnly": "npm run build",
     "pretest": "npm run build && npm run build:test",
-    "test": "node --test dist-test/index.test.js dist-test/protobuf.test.js",
-    "proto": "mkdir -p proto && pbjs -t static-module -w commonjs -o testing/proto/profile.js testing/proto/profile.proto && pbts -o testing/proto/profile.d.ts testing/proto/profile.js"
+    "test": "node --test dist-test/index.test.js dist-test/protobuf.test.js dist-test/otel.test.js",
+    "proto": "mkdir -p proto && pbjs -t static-module -w commonjs -o testing/proto/profile.js testing/proto/profile.proto && pbts -o testing/proto/profile.d.ts testing/proto/profile.js",
+    "proto:otel": "cd testing/otel-proto && pbjs -t static-module -w commonjs -p . -o otel.js opentelemetry/proto/collector/profiles/v1development/profiles_service.proto && pbts -o otel.d.ts otel.js"
   },
   "homepage": "https://github.com/DataDog/pprof-format#readme",
   "repository": {

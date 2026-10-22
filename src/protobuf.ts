@@ -132,6 +132,17 @@ export function decodeNumbers(buffer: Uint8Array, from = 0, to = buffer.length):
   return values
 }
 
+const twoTo63 = 2n ** 63n
+const twoTo64 = 2n ** 64n
+
+/**
+ * Interprets an unsigned varint as int64 or int32. Negative values use 10 bytes
+ * and decode as bigints >= 2^63.
+ */
+export function toSigned(number: Numeric): Numeric {
+  return typeof number === 'bigint' && number >= twoTo63 ? number - twoTo64 : number
+}
+
 /** Decodes a little-endian uint64 as a number if safe, or a bigint otherwise. */
 export function decodeFixed64(buffer: Uint8Array, start = 0): Numeric {
   const lo = (buffer[start] | buffer[start + 1] << 8 | buffer[start + 2] << 16 | buffer[start + 3] << 24) >>> 0
@@ -313,28 +324,30 @@ export function verifyEncodedLength(end: number, length: number) {
 
 /*
  * Field helpers take a field number and omit default values. Message fields
- * are omitted only if undefined.
+ * are omitted only if undefined. `always` preserves scalar defaults for oneof
+ * members and repeated elements.
  */
 
-export function measureNumberField(field: number, number: Numeric): number {
+export function measureNumberField(field: number, number: Numeric, always = false): number {
   const length = measureNumber(number)
-  return length ? measureTag(field) + length : 0
+  if (length) return measureTag(field) + length
+  return always ? measureTag(field) + 1 : 0
 }
 
-export function encodeNumberField(buffer: Uint8Array, offset: number, field: number, number: Numeric): number {
-  if (!number) return offset
+export function encodeNumberField(buffer: Uint8Array, offset: number, field: number, number: Numeric, always = false): number {
+  if (!number && !always) return offset
   offset = encodeTag(buffer, offset, field, kTypeVarInt)
   return encodeNumber(buffer, offset, number)
 }
 
-export function measureBoolField(field: number, value: boolean): number {
-  return value ? measureTag(field) + 1 : 0
+export function measureBoolField(field: number, value: boolean, always = false): number {
+  return value || always ? measureTag(field) + 1 : 0
 }
 
-export function encodeBoolField(buffer: Uint8Array, offset: number, field: number, value: boolean): number {
-  if (!value) return offset
+export function encodeBoolField(buffer: Uint8Array, offset: number, field: number, value: boolean, always = false): number {
+  if (!value && !always) return offset
   offset = encodeTag(buffer, offset, field, kTypeVarInt)
-  buffer[offset++] = 1
+  buffer[offset++] = value ? 1 : 0
   return offset
 }
 
@@ -389,37 +402,88 @@ export function encodePackedFixed64Field(buffer: Uint8Array, offset: number, fie
 }
 
 // Only +0 is the default value of a double field; -0 and NaN are encoded.
-export function measureDoubleField(field: number, value: number): number {
-  return Object.is(value, 0) ? 0 : measureTag(field) + 8
+export function measureDoubleField(field: number, value: number, always = false): number {
+  return Object.is(value, 0) && !always ? 0 : measureTag(field) + 8
 }
 
-export function encodeDoubleField(buffer: Uint8Array, offset: number, field: number, value: number): number {
-  if (Object.is(value, 0)) return offset
+export function encodeDoubleField(buffer: Uint8Array, offset: number, field: number, value: number, always = false): number {
+  if (Object.is(value, 0) && !always) return offset
   offset = encodeTag(buffer, offset, field, kTypeFixed64)
   new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength).setFloat64(offset, value, true)
   return offset + 8
 }
 
-export function measureBytesField(field: number, bytes: Uint8Array): number {
-  const length = bytes.length
-  return length ? measureTag(field) + measureNumber(length) + length : 0
+function measureLengthDelim(field: number, length: number, always: boolean): number {
+  if (!length && !always) return 0
+  return measureTag(field) + (measureNumber(length) || 1) + length
 }
 
-export function encodeBytesField(buffer: Uint8Array, offset: number, field: number, bytes: Uint8Array): number {
-  if (!bytes.length) return offset
+export function measureBytesField(field: number, bytes: Uint8Array, always = false): number {
+  return measureLengthDelim(field, bytes.length, always)
+}
+
+export function encodeBytesField(buffer: Uint8Array, offset: number, field: number, bytes: Uint8Array, always = false): number {
+  if (!bytes.length && !always) return offset
   offset = encodeTag(buffer, offset, field, kTypeLengthDelim)
   offset = encodeNumber(buffer, offset, bytes.length)
   buffer.set(bytes, offset)
   return offset + bytes.length
 }
 
-/** Measures a string field from its UTF-8 bytes. */
-export function measureStringField(field: number, utf8: Uint8Array): number {
-  return measureBytesField(field, utf8)
+/** UTF-8 byte length; lone surrogates become U+FFFD (3 bytes), as in TextEncoder. */
+export function utf8Length(string: string): number {
+  let length = 0
+  for (let i = 0; i < string.length; i++) {
+    const code = string.charCodeAt(i)
+    if (code < 0x80) {
+      length += 1
+    } else if (code < 0x800) {
+      length += 2
+    } else if ((code & 0xfc00) === 0xd800 && (string.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
+      // A surrogate pair encodes one code point in 4 bytes
+      length += 4
+      i++
+    } else {
+      length += 3
+    }
+  }
+  return length
 }
 
-export function encodeStringField(buffer: Uint8Array, offset: number, field: number, utf8: Uint8Array): number {
-  return encodeBytesField(buffer, offset, field, utf8)
+const textEncoder = new TextEncoder()
+// Preserve leading U+FEFF: protobuf strings have no byte order mark.
+const textDecoder = new TextDecoder('utf-8', { ignoreBOM: true })
+
+export function measureStringField(field: number, string: string, always = false): number {
+  return measureLengthDelim(field, utf8Length(string), always)
+}
+
+export function encodeStringField(buffer: Uint8Array, offset: number, field: number, string: string, always = false): number {
+  if (!string && !always) return offset
+  const length = utf8Length(string)
+  offset = encodeTag(buffer, offset, field, kTypeLengthDelim)
+  offset = encodeNumber(buffer, offset, length)
+  textEncoder.encodeInto(string, buffer.subarray(offset, offset + length))
+  return offset + length
+}
+
+export function measureStringArrayField(field: number, strings: string[]): number {
+  let total = 0
+  for (const string of strings) {
+    total += measureStringField(field, string, true)
+  }
+  return total
+}
+
+export function encodeStringArrayField(buffer: Uint8Array, offset: number, field: number, strings: string[]): number {
+  for (const string of strings) {
+    offset = encodeStringField(buffer, offset, field, string, true)
+  }
+  return offset
+}
+
+export function decodeString(buffer: Uint8Array, start = 0, end = buffer.length): string {
+  return textDecoder.decode(buffer.subarray(start, end))
 }
 
 export function measureMessageField(field: number, message: Message | undefined): number {
@@ -477,17 +541,23 @@ export function isPackedOrVarInt(wireType: number | undefined): boolean {
   return isVarInt(wireType) || wireType === kTypeLengthDelim
 }
 
+export function isFixed64(wireType: number | undefined): boolean {
+  return wireType === undefined || wireType === kTypeFixed64
+}
+
 /**
  * Decodes buffer[from..to), passing each field's number, value range and wire
  * type to the decoder. Ranges exclude length prefixes and are capped at `to`.
+ * Decodes into `into` if given, allowing the field decoder to merge occurrences.
  */
 export function decodeFields<T>(
   buffer: Uint8Array,
   decoder: (data: T, field: number, buffer: Uint8Array, start: number, end: number, wireType: number) => void,
   from = 0,
-  to = buffer.length
+  to = buffer.length,
+  into?: T
 ): T {
-  const data = {} as T
+  const data = into ?? {} as T
   let index = from
 
   while (index < to) {
