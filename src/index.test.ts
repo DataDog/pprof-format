@@ -356,6 +356,23 @@ test('Profile docUrl', async (t) => {
   })
 })
 
+test('decoding merges occurrences of a singular message field', () => {
+  // period_type { type: 1 } followed by period_type { unit: 2 }
+  const profile = Profile.decode(hexToBuf('5a020801' + '5a021002'))
+  assert.deepStrictEqual({ ...profile.periodType }, { ...new ValueType({ type: 1, unit: 2 }) })
+
+  // A later occurrence overrides the fields it sets
+  const overridden = Profile.decode(hexToBuf('5a0408011002' + '5a020803'))
+  assert.deepStrictEqual({ ...overridden.periodType }, { ...new ValueType({ type: 3, unit: 2 }) })
+})
+
+test('decoding preserves a leading U+FEFF in strings', () => {
+  const stringTable = new StringTable()
+  stringTable.dedup('\uFEFFhello')
+  const decoded = Profile.decode(new Profile({ stringTable }).encode())
+  assert.deepStrictEqual(decoded.stringTable.strings, ['', '\uFEFFhello'])
+})
+
 test('decoding a byte range', async (t) => {
   await t.test('ignores bytes outside the range', () => {
     const label = '08041005187b2006'
