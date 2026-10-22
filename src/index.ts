@@ -5,6 +5,7 @@
  */
 
 import {
+  EncodeContext,
   Message,
   Numeric,
   decodeFields,
@@ -26,11 +27,13 @@ import {
   measureNumber,
   measureNumberField,
   measurePackedNumbersField,
+  newEncodeContext,
   prepareBuffer,
   push,
   pushAll,
   toUtf8,
   verifyEncodedLength,
+  withEncodeContext,
 } from './protobuf.js'
 
 /**
@@ -717,34 +720,38 @@ export class Profile extends Message {
     return offset
   }
 
-  async _encodeToBufferAsync(buffer: Uint8Array, offset = 0): Promise<number> {
-    offset = this._encodeSampleTypesToBuffer(buffer, offset)
+  /** Yields between phases, running each in the supplied context, if any. */
+  async _encodeToBufferAsync(buffer: Uint8Array, offset = 0, context?: EncodeContext): Promise<number> {
+    const phase = (fn: () => number) => context === undefined ? fn() : withEncodeContext(context, fn)
+
+    offset = phase(() => this._encodeSampleTypesToBuffer(buffer, offset))
     await yieldToEventLoop()
 
-    offset = this._encodeSamplesToBuffer(buffer, offset)
+    offset = phase(() => this._encodeSamplesToBuffer(buffer, offset))
     await yieldToEventLoop()
 
-    offset = this._encodeMappingsToBuffer(buffer, offset)
+    offset = phase(() => this._encodeMappingsToBuffer(buffer, offset))
     await yieldToEventLoop()
 
-    offset = this._encodeLocationsToBuffer(buffer, offset)
+    offset = phase(() => this._encodeLocationsToBuffer(buffer, offset))
     await yieldToEventLoop()
 
-    offset = this._encodeFunctionsToBuffer(buffer, offset)
+    offset = phase(() => this._encodeFunctionsToBuffer(buffer, offset))
     await yieldToEventLoop()
 
     offset = this.stringTable._encodeToBuffer(buffer, offset)
     await yieldToEventLoop()
 
-    offset = this._encodeBasicValuesToBuffer(buffer, offset)
+    offset = phase(() => this._encodeBasicValuesToBuffer(buffer, offset))
     return offset
   }
 
   /** Like encode(), but yields between phases. Do not mutate until it settles. */
   async encodeAsync(buffer?: Uint8Array): Promise<Uint8Array> {
-    const length = this.length
+    const context = newEncodeContext()
+    const length = withEncodeContext(context, () => this._measure())
     buffer = prepareBuffer(buffer, length)
-    verifyEncodedLength(await this._encodeToBufferAsync(buffer, 0), length)
+    verifyEncodedLength(await this._encodeToBufferAsync(buffer, 0, context), length)
     return buffer
   }
 
