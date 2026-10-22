@@ -356,6 +356,13 @@ test('Profile docUrl', async (t) => {
   })
 })
 
+test('decoding preserves a leading U+FEFF in strings', () => {
+  const stringTable = new StringTable()
+  stringTable.dedup('\uFEFFhello')
+  const decoded = Profile.decode(new Profile({ stringTable }).encode())
+  assert.deepStrictEqual(decoded.stringTable.strings, ['', '\uFEFFhello'])
+})
+
 test('decoding a byte range', async (t) => {
   await t.test('ignores bytes outside the range', () => {
     const label = '08041005187b2006'
