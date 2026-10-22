@@ -14,10 +14,6 @@ const safeHighMax = 2 ** 21 - 1
 
 export type Numeric = number | bigint
 
-export type DeepPartial<T> = {
-  [P in keyof T]?: DeepPartial<T[P]>
-}
-
 export const kTypeVarInt = 0
 export const kTypeFixed64 = 1
 export const kTypeLengthDelim = 2
@@ -436,11 +432,11 @@ export function encodeMessageArrayField(buffer: Uint8Array, offset: number, fiel
  */
 export function decodeFields<T>(
   buffer: Uint8Array,
-  decoder: (data: any, field: number, buffer: Uint8Array, start: number, end: number, wireType: number) => void,
+  decoder: (data: T, field: number, buffer: Uint8Array, start: number, end: number, wireType: number) => void,
   from = 0,
   to = buffer.length
-): DeepPartial<T> {
-  const data: any = {}
+): T {
+  const data = {} as T
   let index = from
 
   while (index < to) {
