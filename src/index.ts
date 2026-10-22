@@ -160,7 +160,7 @@ export class ValueType extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): ValueType {
-    return new this(decodeFields(buffer, this.decodeValue, start, end) as ValueTypeInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -224,7 +224,7 @@ export class Label extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Label {
-    return new this(decodeFields(buffer, this.decodeValue, start, end) as LabelInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -280,7 +280,7 @@ export class Sample extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Sample {
-    return new this(decodeFields(buffer, this.decodeValue, start, end) as SampleInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -392,7 +392,7 @@ export class Mapping extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Mapping {
-    return new this(decodeFields(buffer, this.decodeValue, start, end) as MappingInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -448,7 +448,7 @@ export class Line extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Line {
-    return new this(decodeFields(buffer, this.decodeValue, start, end) as LineInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -520,7 +520,7 @@ export class Location extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Location {
-    return new this(decodeFields(buffer, this.decodeValue, start, end) as LocationInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -592,7 +592,7 @@ export class Function extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Function {
-    return new this(decodeFields(buffer, this.decodeValue, start, end) as FunctionInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -800,6 +800,6 @@ export class Profile extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Profile {
-    return new this(decodeFields(buffer, this.decodeValue, start, end) as ProfileInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
