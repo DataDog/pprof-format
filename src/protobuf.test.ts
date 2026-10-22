@@ -209,3 +209,35 @@ test('StringTable field number', () => {
   assert.strictEqual(hex(table.encode()), '2a00' + '2a026869')
   assert.strictEqual(hex(new StringTable().encode()), '3200')
 })
+
+test('encoding checks', async (t) => {
+  class Lying extends Message {
+    _measure() {
+      return 3
+    }
+
+    _encodeToBuffer(buffer: Uint8Array, offset = 0) {
+      return encodeNumberField(buffer, offset, 1, 1)
+    }
+  }
+
+  await t.test('rejects a buffer that is too small', () => {
+    assert.throws(() => new ValueType({ type: 300 }).encode(new Uint8Array(2)), RangeError)
+    assert.strictEqual(hex(new ValueType({ type: 300 }).encode(new Uint8Array(4))), '08ac0200')
+  })
+
+  await t.test('rejects a buffer that is too small for async encoding', async () => {
+    await assert.rejects(new Profile({ period: 300 }).encodeAsync(new Uint8Array(2)), RangeError)
+  })
+
+  await t.test('detects an encoded length that differs from the measured one', () => {
+    assert.throws(() => new Lying().encode(), /Encoded 2 bytes but measured 3/)
+  })
+
+  await t.test('detects a mutation during async encoding', async () => {
+    const profile = new Profile({ sample: [new Sample({ value: [1] })] })
+    const encoding = profile.encodeAsync()
+    profile.period = 300
+    await assert.rejects(encoding, /Encoded \d+ bytes but measured \d+/)
+  })
+})

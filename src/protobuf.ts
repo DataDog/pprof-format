@@ -244,6 +244,7 @@ const kLength = Symbol('length')
 /**
  * Reading `length` caches this message's and its submessages' lengths for
  * `_encodeToBuffer`. `encode` refreshes these lengths before writing.
+ * Do not mutate the message until encoding completes.
  */
 export abstract class Message {
   [kLength] = -1
@@ -263,11 +264,30 @@ export abstract class Message {
 
   abstract _encodeToBuffer(buffer: Uint8Array, offset: number): number
 
+  /** Encodes into the given buffer or a new one. Throws RangeError if too small. */
   encode(buffer?: Uint8Array): Uint8Array {
     const length = this.length
-    buffer ??= new Uint8Array(length)
-    this._encodeToBuffer(buffer, 0)
+    buffer = prepareBuffer(buffer, length)
+    verifyEncodedLength(this._encodeToBuffer(buffer, 0), length)
     return buffer
+  }
+}
+
+/** Allocates a buffer if needed; throws RangeError if the given one is too small. */
+export function prepareBuffer(buffer: Uint8Array | undefined, length: number): Uint8Array {
+  if (buffer === undefined) return new Uint8Array(length)
+  if (buffer.length < length) {
+    throw new RangeError(`Buffer of ${buffer.length} bytes is too small for a message of ${length} bytes`)
+  }
+  return buffer
+}
+
+/**
+ * Rejects length mismatches caused by a codec bug or mutation during encoding.
+ */
+export function verifyEncodedLength(end: number, length: number) {
+  if (end !== length) {
+    throw new Error(`Encoded ${end} bytes but measured ${length}`)
   }
 }
 
