@@ -108,12 +108,32 @@ test('fixed64', async (t) => {
   })
 })
 
-test('double', () => {
-  const buffer = encodeField(measureDoubleField, encodeDoubleField, 4, 0.5)
-  assert.strictEqual(hex(buffer), '21000000000000e03f')
-  const [, wireType, value] = decodeSingle(buffer)
-  assert.strictEqual(wireType, kTypeFixed64)
-  assert.strictEqual(decodeDouble(value), 0.5)
+test('double', async (t) => {
+  await t.test('encodes and decodes', () => {
+    const buffer = encodeField(measureDoubleField, encodeDoubleField, 4, 0.5)
+    assert.strictEqual(hex(buffer), '21000000000000e03f')
+    const [, wireType, value] = decodeSingle(buffer)
+    assert.strictEqual(wireType, kTypeFixed64)
+    assert.strictEqual(decodeDouble(value), 0.5)
+  })
+
+  await t.test('omits only +0', () => {
+    assert.strictEqual(measureDoubleField(4, 0), 0)
+    for (const number of [-0, NaN]) {
+      const buffer = encodeField(measureDoubleField, encodeDoubleField, 4, number)
+      assert.ok(Object.is(decodeDouble(decodeSingle(buffer)[2]), number), `${number} round-trips`)
+    }
+  })
+
+  await t.test('stays within the given view', () => {
+    // A view whose backing store extends past its end, as with pooled Buffers
+    const backing = new Uint8Array(32)
+    const view = backing.subarray(8, 16)
+    assert.throws(() => encodeDoubleField(view, 0, 4, 0.5), RangeError)
+    assert.deepStrictEqual(backing.subarray(16), new Uint8Array(16), 'nothing written past the view')
+    assert.throws(() => decodeDouble(view, 4), RangeError)
+    assert.strictEqual(decodeDouble(backing.subarray(8, 24), 8), 0)
+  })
 })
 
 test('bytes', () => {
