@@ -23,9 +23,11 @@ import {
   measureNumber,
   measureNumberField,
   measurePackedNumbersField,
+  prepareBuffer,
   push,
   pushAll,
   toUtf8,
+  verifyEncodedLength,
 } from './protobuf.js'
 
 /**
@@ -735,10 +737,11 @@ export class Profile extends Message {
     return offset
   }
 
+  /** Like encode(), but yields between phases. Do not mutate until it settles. */
   async encodeAsync(buffer?: Uint8Array): Promise<Uint8Array> {
     const length = this.length
-    buffer ??= new Uint8Array(length)
-    await this._encodeToBufferAsync(buffer, 0)
+    buffer = prepareBuffer(buffer, length)
+    verifyEncodedLength(await this._encodeToBufferAsync(buffer, 0), length)
     return buffer
   }
 
