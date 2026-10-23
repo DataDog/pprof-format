@@ -14,27 +14,26 @@ import {
   encodeBoolField,
   encodeMessageArrayField,
   encodeMessageField,
-  encodeNumber,
   encodeNumberField,
   encodePackedNumbersField,
   isLengthDelim,
   isPackedOrVarInt,
   isVarInt,
-  kTypeLengthDelim,
   measureBoolField,
   measureMessageArrayField,
   measureMessageField,
-  measureNumber,
   measureNumberField,
   measurePackedNumbersField,
   newEncodeContext,
   prepareBuffer,
   push,
   pushAll,
-  toUtf8,
   verifyEncodedLength,
   withEncodeContext,
 } from './protobuf.js'
+import { StringTable, emptyTableToken } from './string-table.js'
+
+export { StringTable, emptyTableToken }
 
 /**
  * Yields to the event loop. Uses setImmediate where available (Node.js), and
@@ -44,82 +43,6 @@ function yieldToEventLoop(): Promise<void> {
   return typeof setImmediate === 'function'
     ? new Promise(resolve => setImmediate(resolve))
     : new Promise(resolve => setTimeout(resolve, 0))
-}
-
-export const emptyTableToken = Symbol()
-
-export class StringTable {
-  strings = new Array<string>()
-  #encodings = new Array<Uint8Array>()
-  #positions = new Map<string, number>()
-  #field: number
-
-  /**
-   * @param tok - emptyTableToken omits the initial empty string.
-   * @param field - field number of the strings in the enclosing message.
-   */
-  constructor(tok?: typeof emptyTableToken, field = 6) {
-    this.#field = field
-    if (tok !== emptyTableToken) {
-      this.dedup('')
-    }
-  }
-
-  get encodedLength(): number {
-    let size = 0
-    for (const encoded of this.#encodings) {
-      size += encoded.length
-    }
-    return size
-  }
-
-  _encodeToBuffer(buffer: Uint8Array, offset: number): number {
-    for (const encoded of this.#encodings) {
-      buffer.set(encoded, offset)
-      offset += encoded.length
-    }
-    return offset
-  }
-
-  encode(buffer = new Uint8Array(this.encodedLength)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
-  }
-
-  static _encodeStringFromUtf8(stringBuffer: Uint8Array | Buffer, field = 6): Uint8Array {
-    const tag = field * 8 + kTypeLengthDelim
-    const buffer = new Uint8Array(
-      (measureNumber(tag) || 1) + (measureNumber(stringBuffer.length) || 1) + stringBuffer.length
-    )
-    let offset = encodeNumber(buffer, 0, tag)
-    offset = encodeNumber(buffer, offset, stringBuffer.length)
-    if (stringBuffer.length > 0) {
-      buffer.set(stringBuffer, offset)
-    }
-    return buffer
-  }
-
-  static _encodeString(string: string, field = 6): Uint8Array {
-    return StringTable._encodeStringFromUtf8(toUtf8(string), field)
-  }
-
-  dedup(string: string): number {
-    if (typeof string === 'number') return string
-    if (!this.#positions.has(string)) {
-      const pos = this.strings.push(string) - 1
-      this.#positions.set(string, pos)
-
-      // Encode strings on insertion
-      this.#encodings.push(StringTable._encodeString(string, this.#field))
-    }
-    return this.#positions.get(string)!
-  }
-
-  _decodeString(buffer: Uint8Array) {
-    const string = new TextDecoder().decode(buffer)
-    this.#positions.set(string, this.strings.push(string) - 1)
-    this.#encodings.push(StringTable._encodeStringFromUtf8(buffer, this.#field))
-  }
 }
 
 export type ValueTypeInput = {
