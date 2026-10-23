@@ -1,0 +1,341 @@
+/**
+ * Unless explicitly stated otherwise all files in this repository are licensed under the MIT License.
+ *
+ * This product includes software developed at Datadog (https://www.datadoghq.com/  Copyright 2026 Datadog, Inc.
+ */
+
+import { test } from 'node:test'
+import assert from 'node:assert'
+
+import {
+  Message,
+  Numeric,
+  decodeDouble,
+  decodeFields,
+  decodeFixed64,
+  decodeFixed64s,
+  decodeNumber,
+  encodeBytesField,
+  encodeDoubleField,
+  encodeFixed64Field,
+  encodeMessageField,
+  encodeNumberField,
+  encodePackedFixed64Field,
+  kTypeFixed32,
+  kTypeFixed64,
+  kTypeLengthDelim,
+  kTypeVarInt,
+  measureBytesField,
+  measureDoubleField,
+  measureFixed64Field,
+  measureMessageField,
+  measureNumberField,
+  measurePackedFixed64Field
+} from './protobuf.js'
+import { Label, LabelInput, Profile, Sample, StringTable, ValueType } from './index.js'
+
+function hex(buf: Uint8Array) {
+  return Buffer.from(buf).toString('hex')
+}
+
+function fromHex(hex: string) {
+  return Uint8Array.from(Buffer.from(hex, 'hex'))
+}
+
+/** Encodes one field and checks that its measured and encoded lengths match. */
+function encodeField<T>(
+  measure: (field: number, value: T) => number,
+  encode: (buffer: Uint8Array, offset: number, field: number, value: T) => number,
+  field: number,
+  value: T
+): Uint8Array {
+  const buffer = new Uint8Array(measure(field, value))
+  assert.strictEqual(encode(buffer, 0, field, value), buffer.length, 'measured length')
+  return buffer
+}
+
+function decodeSingle(buffer: Uint8Array) {
+  const fields: Array<[number, number, Uint8Array]> = []
+  decodeFields(buffer, (_data, field, buffer, start, end, wireType) => {
+    fields.push([field, wireType, buffer.subarray(start, end)])
+  })
+  assert.strictEqual(fields.length, 1)
+  return fields[0]
+}
+
+test('multi-byte tags', async (t) => {
+  for (const field of [15, 16, 2047, 2048, 536870911]) {
+    await t.test(`field ${field}`, () => {
+      const buffer = encodeField(measureNumberField, encodeNumberField, field, 300)
+      const [decodedField, wireType, value] = decodeSingle(buffer)
+      assert.strictEqual(decodedField, field)
+      assert.strictEqual(wireType, kTypeVarInt)
+      assert.strictEqual(decodeNumber(value), 300)
+    })
+  }
+})
+
+test('fixed64', async (t) => {
+  const cases: Array<[Numeric, string]> = [
+    [1, '0100000000000000'],
+    [2 ** 53 - 1, 'ffffffffffff1f00'],
+    [1700000000123456789n, '15cd853dfe9c9717'],
+    [-1, 'ffffffffffffffff']
+  ]
+  for (const [number, encoded] of cases) {
+    await t.test(`encodes and decodes ${number}`, () => {
+      const buffer = encodeField(measureFixed64Field, encodeFixed64Field, 3, number)
+      assert.strictEqual(hex(buffer), '19' + encoded)
+      const [field, wireType, value] = decodeSingle(buffer)
+      assert.strictEqual(field, 3)
+      assert.strictEqual(wireType, kTypeFixed64)
+      const expected = number === -1 ? 2n ** 64n - 1n : number
+      assert.strictEqual(decodeFixed64(value), expected)
+    })
+  }
+
+  await t.test('omits zero', () => {
+    assert.strictEqual(measureFixed64Field(3, 0), 0)
+  })
+
+  await t.test('encodes and decodes packed values', () => {
+    const values = [1, 1700000000123456789n]
+    const buffer = encodeField(measurePackedFixed64Field, encodePackedFixed64Field, 5, values)
+    assert.strictEqual(hex(buffer), '2a10' + '0100000000000000' + '15cd853dfe9c9717')
+    const [, wireType, value] = decodeSingle(buffer)
+    assert.strictEqual(wireType, kTypeLengthDelim)
+    assert.deepStrictEqual(decodeFixed64s(value), values)
+  })
+})
+
+test('double', async (t) => {
+  await t.test('encodes and decodes', () => {
+    const buffer = encodeField(measureDoubleField, encodeDoubleField, 4, 0.5)
+    assert.strictEqual(hex(buffer), '21000000000000e03f')
+    const [, wireType, value] = decodeSingle(buffer)
+    assert.strictEqual(wireType, kTypeFixed64)
+    assert.strictEqual(decodeDouble(value), 0.5)
+  })
+
+  await t.test('omits only +0', () => {
+    assert.strictEqual(measureDoubleField(4, 0), 0)
+    for (const number of [-0, NaN]) {
+      const buffer = encodeField(measureDoubleField, encodeDoubleField, 4, number)
+      assert.ok(Object.is(decodeDouble(decodeSingle(buffer)[2]), number), `${number} round-trips`)
+    }
+  })
+
+  await t.test('stays within the given view', () => {
+    // A view whose backing store extends past its end, as with pooled Buffers
+    const backing = new Uint8Array(32)
+    const view = backing.subarray(8, 16)
+    assert.throws(() => encodeDoubleField(view, 0, 4, 0.5), RangeError)
+    assert.deepStrictEqual(backing.subarray(16), new Uint8Array(16), 'nothing written past the view')
+    assert.throws(() => decodeDouble(view, 4), RangeError)
+    assert.strictEqual(decodeDouble(backing.subarray(8, 24), 8), 0)
+  })
+})
+
+test('bytes', () => {
+  const bytes = fromHex('0102ff')
+  const buffer = encodeField(measureBytesField, encodeBytesField, 2, bytes)
+  assert.strictEqual(hex(buffer), '12030102ff')
+  const [, wireType, value] = decodeSingle(buffer)
+  assert.strictEqual(wireType, kTypeLengthDelim)
+  assert.deepStrictEqual(value, bytes)
+  assert.strictEqual(measureBytesField(2, new Uint8Array(0)), 0)
+})
+
+test('message fields', async (t) => {
+  await t.test('encodes an empty message that is present', () => {
+    const empty = new ValueType({})
+    const buffer = encodeField(measureMessageField, encodeMessageField, 11, empty)
+    assert.strictEqual(hex(buffer), '5a00')
+    assert.strictEqual(measureMessageField(11, undefined), 0)
+  })
+
+  await t.test('measures empty submessages of a profile', () => {
+    const profile = new Profile({
+      stringTable: new StringTable(),
+      periodType: new ValueType({}),
+      sample: [new Sample({})]
+    })
+    const encoded = profile.encode()
+    assert.strictEqual(encoded.length, profile.length)
+    const decoded = Profile.decode(encoded)
+    assert.strictEqual(decoded.sample.length, 1)
+    assert.ok(decoded.periodType instanceof ValueType)
+  })
+
+  await t.test('leaves no state on encoded messages', () => {
+    const encoded = new Profile({ sample: [new Sample({ value: [1], label: [new Label({ key: 1 })] })] })
+    encoded.encode()
+    assert.strictEqual(encoded.length, encoded.encode().length)
+    const fresh = new Profile({ sample: [new Sample({ value: [1], label: [new Label({ key: 1 })] })] })
+    assert.deepStrictEqual(encoded.sample, fresh.sample)
+    assert.deepStrictEqual({ ...encoded.sample[0] }, { ...fresh.sample[0] })
+  })
+
+  await t.test('keeps the lengths of interleaved encodes apart', async () => {
+    const profile = (samples: number) => new Profile({
+      sample: Array.from({ length: samples }, (_, i) => new Sample({
+        locationId: [i + 1, 300 + i],
+        value: [i],
+        label: [new Label({ key: 1, num: 1000 * i })]
+      })),
+      periodType: new ValueType({ type: 1, unit: 2 })
+    })
+    const a = profile(3)
+    const b = profile(40)
+    const c = profile(7)
+    const expected = [a, b, c].map(p => hex(p.encode()))
+    const pending = Promise.all([a.encodeAsync(), b.encodeAsync()])
+    // Encode synchronously while both async encodes are pending.
+    assert.strictEqual(hex(c.encode()), expected[2])
+    const [encodedA, encodedB] = await pending
+    assert.deepStrictEqual([hex(encodedA), hex(encodedB)], expected.slice(0, 2))
+  })
+
+  await t.test('measures each submessage once per encode', async () => {
+    const measure = Label.prototype._measure
+    let calls = 0
+    Label.prototype._measure = function (this: Label) {
+      calls++
+      return measure.call(this)
+    }
+    try {
+      const profile = new Profile({ sample: [new Sample({ label: [new Label({ key: 1 }), new Label({ key: 2 })] })] })
+      profile.encode()
+      assert.strictEqual(calls, 2, 'encode()')
+      calls = 0
+      await profile.encodeAsync()
+      assert.strictEqual(calls, 2, 'encodeAsync()')
+    } finally {
+      Label.prototype._measure = measure
+    }
+  })
+
+  await t.test('re-measures after mutation', () => {
+    const sample = new Sample({ value: [1] })
+    const profile = new Profile({ sample: [sample] })
+    const before = profile.encode()
+    sample.value.push(300)
+    const after = profile.encode()
+    assert.strictEqual(after.length, before.length + 2)
+    assert.deepStrictEqual(Profile.decode(after).sample[0].value, [1, 300])
+  })
+
+  await t.test('encode measures even when given a buffer', () => {
+    class Wrapper extends Message {
+      constructor(public inner: ValueType) {
+        super()
+      }
+
+      _measure() {
+        return measureMessageField(1, this.inner)
+      }
+
+      _encodeToBuffer(buffer: Uint8Array, offset = 0) {
+        return encodeMessageField(buffer, offset, 1, this.inner)
+      }
+    }
+    const inner = new ValueType({ type: 1 })
+    const wrapper = new Wrapper(inner)
+    wrapper.encode()
+    inner.unit = 2
+    const buffer = new Uint8Array(6)
+    wrapper.encode(buffer)
+    assert.strictEqual(hex(buffer), '0a0408011002')
+  })
+})
+
+test('decoders skip unknown fields of all wire types', () => {
+  const unknown = [
+    // field 20, varint
+    'a00105',
+    // field 21, fixed64
+    'a9010102030405060708',
+    // field 22, length-delimited
+    'b2010201ff',
+    // field 23, fixed32
+    'bd0101020304'
+  ].join('')
+  const sample = Sample.decode(fromHex('0a0105' + unknown + '120107'))
+  assert.deepStrictEqual(sample.locationId, [5])
+  assert.deepStrictEqual(sample.value, [7])
+
+  const wireTypes: number[] = []
+  decodeFields(fromHex(unknown), (_data, _field, _buffer, _start, _end, wireType) => {
+    wireTypes.push(wireType)
+  })
+  assert.deepStrictEqual(wireTypes, [kTypeVarInt, kTypeFixed64, kTypeLengthDelim, kTypeFixed32])
+})
+
+test('StringTable field number', () => {
+  const table = new StringTable(undefined, 5)
+  table.dedup('hi')
+  assert.strictEqual(hex(table.encode()), '2a00' + '2a026869')
+  assert.strictEqual(hex(new StringTable().encode()), '3200')
+})
+
+test('encoding checks', async (t) => {
+  class Lying extends Message {
+    _measure() {
+      return 3
+    }
+
+    _encodeToBuffer(buffer: Uint8Array, offset = 0) {
+      return encodeNumberField(buffer, offset, 1, 1)
+    }
+  }
+
+  await t.test('rejects a buffer that is too small', () => {
+    assert.throws(() => new ValueType({ type: 300 }).encode(new Uint8Array(2)), RangeError)
+    assert.strictEqual(hex(new ValueType({ type: 300 }).encode(new Uint8Array(4))), '08ac0200')
+  })
+
+  await t.test('rejects a buffer that is too small for async encoding', async () => {
+    await assert.rejects(new Profile({ period: 300 }).encodeAsync(new Uint8Array(2)), RangeError)
+  })
+
+  await t.test('detects an encoded length that differs from the measured one', () => {
+    assert.throws(() => new Lying().encode(), /Encoded 2 bytes but measured 3/)
+  })
+
+  await t.test('detects a mutation during async encoding', async () => {
+    const profile = new Profile({ sample: [new Sample({ value: [1] })] })
+    const encoding = profile.encodeAsync()
+    profile.period = 300
+    await assert.rejects(encoding, /Encoded \d+ bytes but measured \d+/)
+  })
+})
+
+test('decoders skip fields with mismatched wire types', async (t) => {
+  await t.test('varint field encoded as length-delimited', () => {
+    // key (field 1) as length-delimited, then str (field 2) as varint
+    const label = Label.decode(fromHex('0a0105' + '1007'))
+    assert.strictEqual(label.key, 0)
+    assert.strictEqual(label.str, 7)
+  })
+
+  await t.test('packed field encoded as fixed64', () => {
+    // locationId (field 1) as fixed64, then value (field 2) packed
+    const sample = Sample.decode(fromHex('09' + '0102030405060708' + '120107'))
+    assert.deepStrictEqual(sample.locationId, [])
+    assert.deepStrictEqual(sample.value, [7])
+  })
+
+  await t.test('message and string fields encoded as varints', () => {
+    // sample (field 2) and string_table (field 6) as varints, then period (field 12)
+    const profile = Profile.decode(fromHex('1005' + '3001' + '6007'))
+    assert.deepStrictEqual(profile.sample, [])
+    assert.deepStrictEqual(profile.stringTable.strings, [''])
+    assert.strictEqual(profile.period, 7)
+  })
+
+  await t.test('decodeValue without a wire type decodes as before', () => {
+    const data: LabelInput = {}
+    Label.decodeValue(data, 1, fromHex('05'))
+    assert.strictEqual(data.key, 5)
+  })
+})
