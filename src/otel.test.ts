@@ -200,6 +200,76 @@ test('ExportProfilesServiceRequest', async (t) => {
   })
 })
 
+test('ExportProfilesServiceRequest.encodeAsync', async (t) => {
+  await t.test('encodes the same bytes as encode() and protobufjs', async () => {
+    const input = exampleRequest()
+    const request = new ExportProfilesServiceRequest(input)
+    const encoded = hex(await request.encodeAsync())
+    assert.strictEqual(encoded, hex(request.encode()))
+    assert.strictEqual(encoded, hex(encodeWithProtobufjs(input)))
+  })
+
+  await t.test('encodes a request without a dictionary', async () => {
+    const request = new ExportProfilesServiceRequest({ resourceProfiles: [{ schemaUrl: 'x' }] })
+    assert.strictEqual(hex(await request.encodeAsync()), hex(request.encode()))
+  })
+
+  await t.test('works without setImmediate (browsers)', async () => {
+    const { setImmediate } = globalThis
+    // @ts-expect-error simulating an environment without setImmediate
+    delete globalThis.setImmediate
+    try {
+      const request = new ExportProfilesServiceRequest(exampleRequest())
+      assert.strictEqual(hex(await request.encodeAsync()), hex(request.encode()))
+    } finally {
+      globalThis.setImmediate = setImmediate
+    }
+  })
+
+  await t.test('keeps the lengths of interleaved encodes apart', async () => {
+    const a = new ExportProfilesServiceRequest(exampleRequest())
+    const b = new ExportProfilesServiceRequest({
+      ...exampleRequest(),
+      resourceProfiles: [{ schemaUrl: 'other' }]
+    })
+    const c = new ExportProfilesServiceRequest(exampleRequest())
+    const expected = [a, b, c].map(request => hex(request.encode()))
+    const pending = Promise.all([a.encodeAsync(), b.encodeAsync()])
+    // A synchronous encode while both asynchronous ones are in progress
+    assert.strictEqual(hex(c.encode()), expected[2])
+    const [encodedA, encodedB] = await pending
+    assert.deepStrictEqual([hex(encodedA), hex(encodedB)], expected.slice(0, 2))
+  })
+
+  await t.test('measures each submessage once', async () => {
+    const measure = Sample.prototype._measure
+    let calls = 0
+    Sample.prototype._measure = function (this: Sample) {
+      calls++
+      return measure.call(this)
+    }
+    try {
+      await new ExportProfilesServiceRequest(exampleRequest()).encodeAsync()
+      assert.strictEqual(calls, 2)
+    } finally {
+      Sample.prototype._measure = measure
+    }
+  })
+
+  await t.test('rejects a buffer that is too small', async () => {
+    const request = new ExportProfilesServiceRequest(exampleRequest())
+    await assert.rejects(request.encodeAsync(new Uint8Array(10)), RangeError)
+  })
+
+  await t.test('detects a mutation while encoding', async () => {
+    const request = new ExportProfilesServiceRequest(exampleRequest())
+    const encoding = request.encodeAsync()
+    // The string table is encoded after the first yield
+    request.dictionary!.stringTable.dedup('added during encoding')
+    await assert.rejects(encoding, /Encoded \d+ bytes but measured \d+/)
+  })
+})
+
 test('ExportProfilesServiceResponse', () => {
   const { ExportProfilesServiceResponse: PbResponse } = pb.collector.profiles.v1development
   const encoded = PbResponse.encode(PbResponse.fromObject({

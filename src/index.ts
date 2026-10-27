@@ -30,20 +30,11 @@ import {
   pushAll,
   toUtf8,
   verifyEncodedLength,
+  yieldToEventLoop,
 } from './protobuf.js'
 import { StringTableBase, emptyTableToken, encodeStringEntry } from './string-table.js'
 
 export { emptyTableToken }
-
-/**
- * Yields to the event loop. Uses setImmediate where available (Node.js), and
- * falls back to setTimeout in browsers, which lack setImmediate.
- */
-function yieldToEventLoop(): Promise<void> {
-  return typeof setImmediate === 'function'
-    ? new Promise(resolve => setImmediate(resolve))
-    : new Promise(resolve => setTimeout(resolve, 0))
-}
 
 /*
  * Field numbers of the messages, as declared in pprof's profile.proto. Const

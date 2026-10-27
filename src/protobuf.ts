@@ -265,6 +265,16 @@ export type EncodeContext = {
   cursor: number
 }
 
+/**
+ * Yields to the event loop. Uses setImmediate where available (Node.js), and
+ * falls back to setTimeout in browsers, which lack setImmediate.
+ */
+export function yieldToEventLoop(): Promise<void> {
+  return typeof setImmediate === 'function'
+    ? new Promise(resolve => setImmediate(resolve))
+    : new Promise(resolve => setTimeout(resolve, 0))
+}
+
 export function newEncodeContext(): EncodeContext {
   return { lengths: [], cursor: 0 }
 }
@@ -490,9 +500,14 @@ export function measureMessageField(field: number, message: Message | undefined,
 
 export function encodeMessageField(buffer: Uint8Array, offset: number, field: number, message: Message | undefined, context: EncodeContext): number {
   if (message === undefined) return offset
-  offset = encodeTag(buffer, offset, field, kTypeLengthDelim)
-  offset = encodeNumber(buffer, offset, context.lengths[context.cursor++])
+  offset = encodeMessageFieldHeader(buffer, offset, field, context)
   return message._encodeToBuffer(buffer, offset, context)
+}
+
+/** Encodes a message field's tag and recorded length, for encoding its fields separately. */
+export function encodeMessageFieldHeader(buffer: Uint8Array, offset: number, field: number, context: EncodeContext): number {
+  offset = encodeTag(buffer, offset, field, kTypeLengthDelim)
+  return encodeNumber(buffer, offset, context.lengths[context.cursor++])
 }
 
 export function measureMessageArrayField(field: number, messages: Message[], context: EncodeContext): number {

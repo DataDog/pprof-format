@@ -31,6 +31,7 @@ import {
   encodeFixed64Field,
   encodeMessageArrayField,
   encodeMessageField,
+  encodeMessageFieldHeader,
   encodeNumberField,
   encodePackedFixed64Field,
   encodePackedNumbersField,
@@ -51,9 +52,13 @@ import {
   measurePackedNumbersField,
   measureStringArrayField,
   measureStringField,
+  newEncodeContext,
+  prepareBuffer,
   push,
   pushAll,
   toSigned,
+  verifyEncodedLength,
+  yieldToEventLoop,
 } from './protobuf.js'
 import { StringTableBase, emptyTableToken } from './string-table.js'
 
@@ -690,6 +695,26 @@ export class ProfilesDictionary extends Message {
     return offset
   }
 
+  /** Like _encodeToBuffer(), but yields between tables. */
+  async _encodeToBufferAsync(buffer: Uint8Array, offset: number, context: EncodeContext): Promise<number> {
+    offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.mappingTable, this.mappingTable, context)
+    await yieldToEventLoop()
+
+    offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.locationTable, this.locationTable, context)
+    await yieldToEventLoop()
+
+    offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.functionTable, this.functionTable, context)
+    offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.linkTable, this.linkTable, context)
+    await yieldToEventLoop()
+
+    offset = this.stringTable._encodeToBuffer(buffer, offset)
+    await yieldToEventLoop()
+
+    offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.attributeTable, this.attributeTable, context)
+    offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.stackTable, this.stackTable, context)
+    return offset
+  }
+
   static decodeValue(data: ProfilesDictionaryInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
       case ProfilesDictionaryField.mappingTable:
@@ -766,6 +791,28 @@ export class ProfilesData extends Message {
     offset = encodeMessageArrayField(buffer, offset, ProfilesDataField.resourceProfiles, this.resourceProfiles, context)
     offset = encodeMessageField(buffer, offset, ProfilesDataField.dictionary, this.dictionary, context)
     return offset
+  }
+
+  /** Like _encodeToBuffer(), but yields between phases. */
+  async _encodeToBufferAsync(buffer: Uint8Array, offset: number, context: EncodeContext): Promise<number> {
+    const dictionary = this.dictionary
+
+    offset = encodeMessageArrayField(buffer, offset, ProfilesDataField.resourceProfiles, this.resourceProfiles, context)
+    if (dictionary === undefined) return offset
+    await yieldToEventLoop()
+
+    // Read the dictionary's recorded length in the same order as encode() does
+    offset = encodeMessageFieldHeader(buffer, offset, ProfilesDataField.dictionary, context)
+    return dictionary._encodeToBufferAsync(buffer, offset, context)
+  }
+
+  /** Like encode(), but yields between phases. Do not mutate until it settles. */
+  async encodeAsync(buffer?: Uint8Array): Promise<Uint8Array> {
+    const context = newEncodeContext()
+    const length = this._measure(context)
+    buffer = prepareBuffer(buffer, length)
+    verifyEncodedLength(await this._encodeToBufferAsync(buffer, 0, context), length)
+    return buffer
   }
 
   static decodeValue(data: ProfilesDataInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
