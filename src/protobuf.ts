@@ -89,21 +89,22 @@ function long(number: Numeric): Array<number> {
   return [hi, lo]
 }
 
-function tag(field: number, wireType: number): number {
+/** The tag of a field: its number and wire type, as encoded before its value. */
+export function fieldTag(field: number, wireType: number): number {
   return field * 8 + wireType
 }
 
 function measureTag(field: number): number {
   // Tags of fields 1 to 15 fit in one byte
-  return field < 16 ? 1 : measureNumber(tag(field, 0))
+  return field < 16 ? 1 : measureNumber(fieldTag(field, 0))
 }
 
 function encodeTag(buffer: Uint8Array, offset: number, field: number, wireType: number): number {
   if (field < 16) {
-    buffer[offset++] = tag(field, wireType)
+    buffer[offset++] = fieldTag(field, wireType)
     return offset
   }
-  return encodeNumber(buffer, offset, tag(field, wireType))
+  return encodeNumber(buffer, offset, fieldTag(field, wireType))
 }
 
 /* Message helpers. */
@@ -196,6 +197,16 @@ export function measureNumber(number: Numeric): number {
   }
 
   return a < 2097152 ? 3 : 4
+}
+
+/**
+ * The number of bytes the varint encoding of a number takes. measureNumber()
+ * returns 0 for 0, so that fields with a default value can be omitted. A 0
+ * that is encoded anyway, such as an empty string's length or a packed array
+ * element, takes one byte, which this counts.
+ */
+export function varintLength(number: Numeric): number {
+  return measureNumber(number) || 1
 }
 
 export function encodeNumber(buffer: Uint8Array, i: number, number: Numeric): number {
@@ -342,7 +353,7 @@ function measurePackedNumbers(values: Numeric[]): number {
   let total = 0
   for (const value of values) {
     // Arrays should always include zeros to keep positions consistent
-    total += measureNumber(value) || 1
+    total += varintLength(value)
   }
   return total
 }
@@ -434,7 +445,7 @@ export function measureMessageField(field: number, message: Message | undefined)
     length = message._measure()
     context.lengths[slot] = length
   }
-  return measureTag(field) + (measureNumber(length) || 1) + length
+  return measureTag(field) + varintLength(length) + length
 }
 
 export function encodeMessageField(buffer: Uint8Array, offset: number, field: number, message: Message | undefined): number {
