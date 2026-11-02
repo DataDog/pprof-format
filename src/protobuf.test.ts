@@ -33,6 +33,7 @@ import {
   measurePackedFixed64Field
 } from './protobuf.js'
 import { Label, LabelInput, Profile, Sample, StringTable, ValueType } from './index.js'
+import { StringTableBase } from './string-table.js'
 
 function hex(buf: Uint8Array) {
   return Buffer.from(buf).toString('hex')
@@ -272,10 +273,19 @@ test('decoders skip unknown fields of all wire types', () => {
 })
 
 test('StringTable field number', () => {
-  const table = new StringTable(undefined, 5)
+  class FieldFiveTable extends StringTableBase {
+    constructor() {
+      super(undefined, 5)
+    }
+  }
+  const table = new FieldFiveTable()
   table.dedup('hi')
   assert.strictEqual(hex(table.encode()), '2a00' + '2a026869')
   assert.strictEqual(hex(new StringTable().encode()), '3200')
+  assert.throws(
+    () => new Profile({ stringTable: table as StringTable }),
+    { name: 'TypeError', message: /must be a pprof StringTable/ }
+  )
 })
 
 test('encoding checks', async (t) => {

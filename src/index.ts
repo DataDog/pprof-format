@@ -14,14 +14,11 @@ import {
   encodeBoolField,
   encodeMessageArrayField,
   encodeMessageField,
-  encodeNumber,
   encodeNumberField,
   encodePackedNumbersField,
-  fieldTag,
   isLengthDelim,
   isPackedOrVarInt,
   isVarInt,
-  kTypeLengthDelim,
   measureBoolField,
   measureMessageArrayField,
   measureMessageField,
@@ -32,10 +29,12 @@ import {
   push,
   pushAll,
   toUtf8,
-  varintLength,
   verifyEncodedLength,
   withEncodeContext,
 } from './protobuf.js'
+import { StringTableBase, emptyTableToken, encodeStringEntry } from './string-table.js'
+
+export { emptyTableToken }
 
 /**
  * Yields to the event loop. Uses setImmediate where available (Node.js), and
@@ -122,77 +121,19 @@ const enum ProfileField {
   docUrl = 15,
 }
 
-export const emptyTableToken = Symbol()
-
-export class StringTable {
-  strings = new Array<string>()
-  #encodings = new Array<Uint8Array>()
-  #positions = new Map<string, number>()
-  #field: number
-
-  /**
-   * @param tok - emptyTableToken omits the initial empty string.
-   * @param field - field number of the strings in the enclosing message.
-   */
-  constructor(tok?: typeof emptyTableToken, field: number = ProfileField.stringTable) {
-    this.#field = field
-    if (tok !== emptyTableToken) {
-      this.dedup('')
-    }
+/** The pprof string table, stored in Profile.string_table. */
+export class StringTable extends StringTableBase {
+  /** @param tok - emptyTableToken omits the initial empty string. */
+  constructor(tok?: typeof emptyTableToken) {
+    super(tok, ProfileField.stringTable)
   }
 
-  get encodedLength(): number {
-    let size = 0
-    for (const encoded of this.#encodings) {
-      size += encoded.length
-    }
-    return size
+  static _encodeStringFromUtf8(stringBuffer: Uint8Array | Buffer): Uint8Array {
+    return encodeStringEntry(stringBuffer, ProfileField.stringTable)
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset: number): number {
-    for (const encoded of this.#encodings) {
-      buffer.set(encoded, offset)
-      offset += encoded.length
-    }
-    return offset
-  }
-
-  encode(buffer = new Uint8Array(this.encodedLength)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
-  }
-
-  static _encodeStringFromUtf8(stringBuffer: Uint8Array | Buffer, field: number = ProfileField.stringTable): Uint8Array {
-    const tag = fieldTag(field, kTypeLengthDelim)
-    const buffer = new Uint8Array(varintLength(tag) + varintLength(stringBuffer.length) + stringBuffer.length)
-    let offset = encodeNumber(buffer, 0, tag)
-    offset = encodeNumber(buffer, offset, stringBuffer.length)
-    if (stringBuffer.length > 0) {
-      buffer.set(stringBuffer, offset)
-    }
-    return buffer
-  }
-
-  static _encodeString(string: string, field: number = ProfileField.stringTable): Uint8Array {
-    return StringTable._encodeStringFromUtf8(toUtf8(string), field)
-  }
-
-  dedup(string: string): number {
-    if (typeof string === 'number') return string
-    if (!this.#positions.has(string)) {
-      const pos = this.strings.push(string) - 1
-      this.#positions.set(string, pos)
-
-      // Encode strings on insertion
-      this.#encodings.push(StringTable._encodeString(string, this.#field))
-    }
-    return this.#positions.get(string)!
-  }
-
-  _decodeString(buffer: Uint8Array) {
-    const string = new TextDecoder().decode(buffer)
-    this.#positions.set(string, this.strings.push(string) - 1)
-    this.#encodings.push(StringTable._encodeStringFromUtf8(buffer, this.#field))
+  static _encodeString(string: string): Uint8Array {
+    return StringTable._encodeStringFromUtf8(toUtf8(string))
   }
 }
 
@@ -713,6 +654,9 @@ export class Profile extends Message {
 
   constructor(data: ProfileInput = {}) {
     super()
+    if (data.stringTable !== undefined && !(data.stringTable instanceof StringTable)) {
+      throw new TypeError('Profile.stringTable must be a pprof StringTable')
+    }
     this.sampleType = (data.sampleType || []).map(ValueType.create)
     this.sample = (data.sample || []).map(Sample.create)
     this.mapping = (data.mapping || []).map(Mapping.create)

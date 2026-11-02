@@ -90,16 +90,16 @@ function long(number: Numeric): Array<number> {
 }
 
 /** The tag of a field: its number and wire type, as encoded before its value. */
-export function fieldTag(field: number, wireType: number): number {
+function fieldTag(field: number, wireType: number): number {
   return field * 8 + wireType
 }
 
-function measureTag(field: number): number {
+export function measureTag(field: number): number {
   // Tags of fields 1 to 15 fit in one byte
   return field < 16 ? 1 : measureNumber(fieldTag(field, 0))
 }
 
-function encodeTag(buffer: Uint8Array, offset: number, field: number, wireType: number): number {
+export function encodeTag(buffer: Uint8Array, offset: number, field: number, wireType: number): number {
   if (field < 16) {
     buffer[offset++] = fieldTag(field, wireType)
     return offset
