@@ -323,8 +323,10 @@ export function verifyEncodedLength(end: number, length: number) {
 }
 
 /*
- * Field helpers take a field number and omit default values. Message fields
- * are omitted only if undefined.
+ * Field helpers take a field number. Singular fields omit default values, and
+ * message fields are omitted only if undefined. Repeated fields encode every
+ * element, defaults included, so indices are preserved; only an empty array
+ * is omitted.
  */
 
 export function measureNumberField(field: number, number: Numeric): number {
