@@ -454,7 +454,9 @@ export function utf8Length(string: string): number {
 }
 
 const textEncoder = new TextEncoder()
-// Preserve leading U+FEFF: protobuf strings have no byte order mark.
+// Decode strings exactly as encoded. TextDecoder would otherwise strip a
+// leading U+FEFF as a byte order mark, which other protobuf implementations
+// keep: https://encoding.spec.whatwg.org/#dom-textdecoderoptions-ignorebom
 const textDecoder = new TextDecoder('utf-8', { ignoreBOM: true })
 
 export function measureStringField(field: number, string: string, always = false): number {
