@@ -26,6 +26,11 @@ const toUtf8 = typeof Buffer === 'undefined'
   ? (value: string) => new TextEncoder().encode(value)
   : (value: string) => Buffer.from(value, 'utf8')
 
+// Decode strings exactly as encoded. TextDecoder would otherwise strip a
+// leading U+FEFF as a byte order mark, which other protobuf implementations
+// keep: https://encoding.spec.whatwg.org/#dom-textdecoderoptions-ignorebom
+const textDecoder = new TextDecoder('utf-8', { ignoreBOM: true })
+
 type Numeric = number | bigint
 
 type DeepPartial<T> = {
@@ -301,7 +306,7 @@ export class StringTable {
   }
 
   _decodeString(buffer: Uint8Array) {
-    const string = new TextDecoder().decode(buffer)
+    const string = textDecoder.decode(buffer)
     this.#positions.set(string, this.strings.push(string) - 1)
     this.#encodings.push(StringTable._encodeStringFromUtf8(buffer))
   }
@@ -311,9 +316,9 @@ function decode<T>(
   buffer: Uint8Array,
   decoder: (data: any, field: number, buffer: Uint8Array, start: number, end: number) => void,
   from: number,
-  to: number
+  to: number,
+  data: any = {}
 ): DeepPartial<T> {
-  const data: any = {}
   let index = from
 
   while (index < to) {
@@ -1224,7 +1229,11 @@ export class Profile {
         data.durationNanos = decodeNumber(buffer, start, end)
         break
       case 11:
-        data.periodType = ValueType.decode(buffer, start, end)
+        // Occurrences of a singular message field are merged:
+        // https://protobuf.dev/programming-guides/encoding/#last-one-wins
+        data.periodType = new ValueType(
+          decode(buffer, ValueType.decodeValue, start, end, { ...data.periodType }) as ValueTypeInput
+        )
         break
       case 12:
         data.period = decodeNumber(buffer, start, end)
