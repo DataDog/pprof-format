@@ -5,6 +5,7 @@
  */
 
 import {
+  decodeString,
   encodeNumber,
   encodeTag,
   kTypeLengthDelim,
@@ -79,7 +80,7 @@ export abstract class StringTableBase {
   }
 
   _decodeString(buffer: Uint8Array) {
-    const string = new TextDecoder().decode(buffer)
+    const string = decodeString(buffer)
     this.#positions.set(string, this.strings.push(string) - 1)
     this.#encodings.push(encodeStringEntry(buffer, this.#field))
   }

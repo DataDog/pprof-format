@@ -808,7 +808,11 @@ export class Profile extends Message {
         if (isVarInt(wireType)) data.durationNanos = decodeNumber(buffer, start, end)
         break
       case ProfileField.periodType:
-        if (isLengthDelim(wireType)) data.periodType = ValueType.decode(buffer, start, end)
+        // Occurrences of a singular message field are merged:
+        // https://protobuf.dev/programming-guides/encoding/#last-one-wins
+        if (isLengthDelim(wireType)) {
+          data.periodType = new ValueType(decodeFields(buffer, ValueType.decodeValue, start, end, { ...data.periodType }))
+        }
         break
       case ProfileField.period:
         if (isVarInt(wireType)) data.period = decodeNumber(buffer, start, end)

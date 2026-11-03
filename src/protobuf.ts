@@ -415,6 +415,15 @@ export function encodeStringField(buffer: Uint8Array, offset: number, field: num
   return encodeBytesField(buffer, offset, field, utf8)
 }
 
+// Decode strings exactly as encoded. TextDecoder would otherwise strip a
+// leading U+FEFF as a byte order mark, which other protobuf implementations
+// keep: https://encoding.spec.whatwg.org/#dom-textdecoderoptions-ignorebom
+const textDecoder = new TextDecoder('utf-8', { ignoreBOM: true })
+
+export function decodeString(buffer: Uint8Array, start = 0, end = buffer.length): string {
+  return textDecoder.decode(buffer.subarray(start, end))
+}
+
 export function measureMessageField(field: number, message: Message | undefined, context: EncodeContext): number {
   if (message === undefined) return 0
   // Reserve the parent's slot first to match length-prefix order.
@@ -467,14 +476,16 @@ export function isPackedOrVarInt(wireType: number | undefined): boolean {
 /**
  * Decodes buffer[from..to), passing each field's number, value range and wire
  * type to the decoder. Ranges exclude length prefixes and are capped at `to`.
+ * Decodes into `into` if given, allowing the field decoder to merge occurrences.
  */
 export function decodeFields<T>(
   buffer: Uint8Array,
   decoder: (data: T, field: number, buffer: Uint8Array, start: number, end: number, wireType: number) => void,
   from = 0,
-  to = buffer.length
+  to = buffer.length,
+  into?: T
 ): T {
-  const data = {} as T
+  const data = into ?? {} as T
   let index = from
 
   while (index < to) {
