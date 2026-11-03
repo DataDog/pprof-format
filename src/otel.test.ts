@@ -6,6 +6,8 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert'
+import * as path from 'node:path'
+import protobuf from 'protobufjs'
 
 import otelProto from '../testing/otel-proto/otel.js'
 
@@ -22,6 +24,7 @@ import {
   StringTable,
   emptyTableToken
 } from './otel.js'
+import * as otel from './otel.js'
 import { StringTable as PprofStringTable } from './index.js'
 
 const pb = otelProto.opentelemetry.proto
@@ -394,4 +397,70 @@ test('decoding preserves a leading U+FEFF in strings', () => {
   strings.dedup('\uFEFFx')
   const dictionary = ProfilesDictionary.decode(new ProfilesDictionary({ stringTable: strings }).encode())
   assert.deepStrictEqual(dictionary.stringTable.strings, ['', '\uFEFFx'])
+})
+
+/*
+ * Guards against drifting from the vendored protos, for example after updating
+ * them: every message must have a class here, and every field of it must
+ * survive decoding and re-encoding.
+ */
+test('codec covers every message and field of the vendored protos', async (t) => {
+  const protoRoot = path.resolve('testing/otel-proto')
+  const root = new protobuf.Root()
+  root.resolvePath = (_origin, target) => path.join(protoRoot, target)
+  root.loadSync('opentelemetry/proto/collector/profiles/v1development/profiles_service.proto')
+  root.resolveAll()
+
+  const scalars: Record<string, unknown> = {
+    bool: true,
+    bytes: Uint8Array.from([1, 2, 3]),
+    double: 1.5,
+    fixed64: '18446744073709551615',
+    int32: -2,
+    int64: '-9007199254740993',
+    string: 'h\u00e9llo',
+    uint32: 3,
+    uint64: '9007199254740993'
+  }
+
+  // A value for every field, choosing one member of each oneof. Message fields
+  // are left unset past maxDepth, since AnyValue is recursive.
+  function exampleValue(type: protobuf.Type, oneofMember?: string, depth = 0): Record<string, unknown> {
+    const value: Record<string, unknown> = {}
+    for (const field of type.fieldsArray) {
+      if (field.partOf && field.name !== (oneofMember ?? field.partOf.oneof[0])) continue
+      let element: unknown
+      if (field.resolvedType instanceof protobuf.Type) {
+        if (depth === 2) continue
+        element = exampleValue(field.resolvedType, undefined, depth + 1)
+      } else if (field.type in scalars) {
+        element = scalars[field.type]
+      } else {
+        throw new Error(`No example value for ${type.name}.${field.name} of type ${field.type}`)
+      }
+      value[field.name] = field.repeated ? [element, element] : element
+    }
+    return value
+  }
+
+  const types: protobuf.Type[] = []
+  const collect = (namespace: protobuf.NamespaceBase) => {
+    for (const nested of namespace.nestedArray) {
+      if (nested instanceof protobuf.Type) types.push(nested)
+      if (nested instanceof protobuf.Namespace) collect(nested)
+    }
+  }
+  collect(root)
+  assert.ok(types.length > 20, 'loaded the protos')
+
+  for (const type of types) {
+    await t.test(type.name, () => {
+      const Class = (otel as Record<string, any>)[type.name]
+      assert.ok(Class, `pprof-format/otel exports a class for ${type.fullName}`)
+      for (const member of type.oneofsArray[0]?.oneof ?? [undefined]) {
+        const encoded = type.encode(type.fromObject(exampleValue(type, member))).finish()
+        assert.strictEqual(hex(Class.decode(encoded).encode()), hex(encoded), member)
+      }
+    })
+  }
 })
