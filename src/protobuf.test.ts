@@ -8,6 +8,7 @@ import { test } from 'node:test'
 import assert from 'node:assert'
 
 import {
+  EncodeContext,
   Message,
   Numeric,
   decodeDouble,
@@ -30,7 +31,8 @@ import {
   measureFixed64Field,
   measureMessageField,
   measureNumberField,
-  measurePackedFixed64Field
+  measurePackedFixed64Field,
+  newEncodeContext
 } from './protobuf.js'
 import { Label, LabelInput, Profile, Sample, StringTable, ValueType } from './index.js'
 import { StringTableBase } from './string-table.js'
@@ -150,9 +152,11 @@ test('bytes', () => {
 test('message fields', async (t) => {
   await t.test('encodes an empty message that is present', () => {
     const empty = new ValueType({})
-    const buffer = encodeField(measureMessageField, encodeMessageField, 11, empty)
+    const context = newEncodeContext()
+    const buffer = new Uint8Array(measureMessageField(11, empty, context))
+    assert.strictEqual(encodeMessageField(buffer, 0, 11, empty, context), buffer.length, 'measured length')
     assert.strictEqual(hex(buffer), '5a00')
-    assert.strictEqual(measureMessageField(11, undefined), 0)
+    assert.strictEqual(measureMessageField(11, undefined, newEncodeContext()), 0)
   })
 
   await t.test('measures empty submessages of a profile', () => {
@@ -232,12 +236,12 @@ test('message fields', async (t) => {
         super()
       }
 
-      _measure() {
-        return measureMessageField(1, this.inner)
+      _measure(context: EncodeContext) {
+        return measureMessageField(1, this.inner, context)
       }
 
-      _encodeToBuffer(buffer: Uint8Array, offset = 0) {
-        return encodeMessageField(buffer, offset, 1, this.inner)
+      _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext) {
+        return encodeMessageField(buffer, offset, 1, this.inner, context)
       }
     }
     const inner = new ValueType({ type: 1 })

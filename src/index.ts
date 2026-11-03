@@ -30,7 +30,6 @@ import {
   pushAll,
   toUtf8,
   verifyEncodedLength,
-  withEncodeContext,
 } from './protobuf.js'
 import { StringTableBase, emptyTableToken, encodeStringEntry } from './string-table.js'
 
@@ -271,18 +270,18 @@ export class Sample extends Message {
     this.label = (data.label || []).map(Label.create)
   }
 
-  _measure() {
+  _measure(context: EncodeContext) {
     let total = 0
     total += measurePackedNumbersField(SampleField.locationId, this.locationId)
     total += measurePackedNumbersField(SampleField.value, this.value)
-    total += measureMessageArrayField(SampleField.label, this.label)
+    total += measureMessageArrayField(SampleField.label, this.label, context)
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
+  _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
     offset = encodePackedNumbersField(buffer, offset, SampleField.locationId, this.locationId)
     offset = encodePackedNumbersField(buffer, offset, SampleField.value, this.value)
-    offset = encodeMessageArrayField(buffer, offset, SampleField.label, this.label)
+    offset = encodeMessageArrayField(buffer, offset, SampleField.label, this.label, context)
     return offset
   }
 
@@ -501,21 +500,21 @@ export class Location extends Message {
     this.isFolded = !!data.isFolded
   }
 
-  _measure() {
+  _measure(context: EncodeContext) {
     let total = 0
     total += measureNumberField(LocationField.id, this.id)
     total += measureNumberField(LocationField.mappingId, this.mappingId)
     total += measureNumberField(LocationField.address, this.address)
-    total += measureMessageArrayField(LocationField.line, this.line)
+    total += measureMessageArrayField(LocationField.line, this.line, context)
     total += measureBoolField(LocationField.isFolded, this.isFolded)
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
+  _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
     offset = encodeNumberField(buffer, offset, LocationField.id, this.id)
     offset = encodeNumberField(buffer, offset, LocationField.mappingId, this.mappingId)
     offset = encodeNumberField(buffer, offset, LocationField.address, this.address)
-    offset = encodeMessageArrayField(buffer, offset, LocationField.line, this.line)
+    offset = encodeMessageArrayField(buffer, offset, LocationField.line, this.line, context)
     offset = encodeBoolField(buffer, offset, LocationField.isFolded, this.isFolded)
     return offset
   }
@@ -674,19 +673,19 @@ export class Profile extends Message {
     this.docUrl = data.docUrl || 0
   }
 
-  _measure() {
+  _measure(context: EncodeContext) {
     let total = 0
-    total += measureMessageArrayField(ProfileField.sampleType, this.sampleType)
-    total += measureMessageArrayField(ProfileField.sample, this.sample)
-    total += measureMessageArrayField(ProfileField.mapping, this.mapping)
-    total += measureMessageArrayField(ProfileField.location, this.location)
-    total += measureMessageArrayField(ProfileField.function, this.function)
+    total += measureMessageArrayField(ProfileField.sampleType, this.sampleType, context)
+    total += measureMessageArrayField(ProfileField.sample, this.sample, context)
+    total += measureMessageArrayField(ProfileField.mapping, this.mapping, context)
+    total += measureMessageArrayField(ProfileField.location, this.location, context)
+    total += measureMessageArrayField(ProfileField.function, this.function, context)
     total += this.stringTable.encodedLength
     total += measureNumberField(ProfileField.dropFrames, this.dropFrames)
     total += measureNumberField(ProfileField.keepFrames, this.keepFrames)
     total += measureNumberField(ProfileField.timeNanos, this.timeNanos)
     total += measureNumberField(ProfileField.durationNanos, this.durationNanos)
-    total += measureMessageField(ProfileField.periodType, this.periodType)
+    total += measureMessageField(ProfileField.periodType, this.periodType, context)
     total += measureNumberField(ProfileField.period, this.period)
     total += measurePackedNumbersField(ProfileField.comment, this.comment)
     total += measureNumberField(ProfileField.defaultSampleType, this.defaultSampleType)
@@ -694,32 +693,32 @@ export class Profile extends Message {
     return total
   }
 
-  _encodeSampleTypesToBuffer(buffer: Uint8Array, offset = 0): number {
-    return encodeMessageArrayField(buffer, offset, ProfileField.sampleType, this.sampleType)
+  _encodeSampleTypesToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    return encodeMessageArrayField(buffer, offset, ProfileField.sampleType, this.sampleType, context)
   }
 
-  _encodeSamplesToBuffer(buffer: Uint8Array, offset = 0): number {
-    return encodeMessageArrayField(buffer, offset, ProfileField.sample, this.sample)
+  _encodeSamplesToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    return encodeMessageArrayField(buffer, offset, ProfileField.sample, this.sample, context)
   }
 
-  _encodeMappingsToBuffer(buffer: Uint8Array, offset = 0): number {
-    return encodeMessageArrayField(buffer, offset, ProfileField.mapping, this.mapping)
+  _encodeMappingsToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    return encodeMessageArrayField(buffer, offset, ProfileField.mapping, this.mapping, context)
   }
 
-  _encodeLocationsToBuffer(buffer: Uint8Array, offset = 0): number {
-    return encodeMessageArrayField(buffer, offset, ProfileField.location, this.location)
+  _encodeLocationsToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    return encodeMessageArrayField(buffer, offset, ProfileField.location, this.location, context)
   }
 
-  _encodeFunctionsToBuffer(buffer: Uint8Array, offset = 0): number {
-    return encodeMessageArrayField(buffer, offset, ProfileField.function, this.function)
+  _encodeFunctionsToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    return encodeMessageArrayField(buffer, offset, ProfileField.function, this.function, context)
   }
 
-  _encodeBasicValuesToBuffer(buffer: Uint8Array, offset = 0): number {
+  _encodeBasicValuesToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
     offset = encodeNumberField(buffer, offset, ProfileField.dropFrames, this.dropFrames)
     offset = encodeNumberField(buffer, offset, ProfileField.keepFrames, this.keepFrames)
     offset = encodeNumberField(buffer, offset, ProfileField.timeNanos, this.timeNanos)
     offset = encodeNumberField(buffer, offset, ProfileField.durationNanos, this.durationNanos)
-    offset = encodeMessageField(buffer, offset, ProfileField.periodType, this.periodType)
+    offset = encodeMessageField(buffer, offset, ProfileField.periodType, this.periodType, context)
     offset = encodeNumberField(buffer, offset, ProfileField.period, this.period)
     offset = encodePackedNumbersField(buffer, offset, ProfileField.comment, this.comment)
     offset = encodeNumberField(buffer, offset, ProfileField.defaultSampleType, this.defaultSampleType)
@@ -727,47 +726,45 @@ export class Profile extends Message {
     return offset
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    offset = this._encodeSampleTypesToBuffer(buffer, offset)
-    offset = this._encodeSamplesToBuffer(buffer, offset)
-    offset = this._encodeMappingsToBuffer(buffer, offset)
-    offset = this._encodeLocationsToBuffer(buffer, offset)
-    offset = this._encodeFunctionsToBuffer(buffer, offset)
+  _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    offset = this._encodeSampleTypesToBuffer(buffer, offset, context)
+    offset = this._encodeSamplesToBuffer(buffer, offset, context)
+    offset = this._encodeMappingsToBuffer(buffer, offset, context)
+    offset = this._encodeLocationsToBuffer(buffer, offset, context)
+    offset = this._encodeFunctionsToBuffer(buffer, offset, context)
     offset = this.stringTable._encodeToBuffer(buffer, offset)
-    offset = this._encodeBasicValuesToBuffer(buffer, offset)
+    offset = this._encodeBasicValuesToBuffer(buffer, offset, context)
     return offset
   }
 
-  /** Yields between phases, running each in the context of the measure pass. */
+  /** Like _encodeToBuffer(), but yields between phases. */
   async _encodeToBufferAsync(buffer: Uint8Array, offset: number, context: EncodeContext): Promise<number> {
-    const phase = (fn: () => number) => withEncodeContext(context, fn)
-
-    offset = phase(() => this._encodeSampleTypesToBuffer(buffer, offset))
+    offset = this._encodeSampleTypesToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = phase(() => this._encodeSamplesToBuffer(buffer, offset))
+    offset = this._encodeSamplesToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = phase(() => this._encodeMappingsToBuffer(buffer, offset))
+    offset = this._encodeMappingsToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = phase(() => this._encodeLocationsToBuffer(buffer, offset))
+    offset = this._encodeLocationsToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = phase(() => this._encodeFunctionsToBuffer(buffer, offset))
+    offset = this._encodeFunctionsToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
     offset = this.stringTable._encodeToBuffer(buffer, offset)
     await yieldToEventLoop()
 
-    offset = phase(() => this._encodeBasicValuesToBuffer(buffer, offset))
+    offset = this._encodeBasicValuesToBuffer(buffer, offset, context)
     return offset
   }
 
   /** Like encode(), but yields between phases. Do not mutate until it settles. */
   async encodeAsync(buffer?: Uint8Array): Promise<Uint8Array> {
     const context = newEncodeContext()
-    const length = withEncodeContext(context, () => this._measure())
+    const length = this._measure(context)
     buffer = prepareBuffer(buffer, length)
     verifyEncodedLength(await this._encodeToBufferAsync(buffer, 0, context), length)
     return buffer

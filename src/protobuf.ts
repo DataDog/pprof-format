@@ -246,7 +246,8 @@ export function encodeFixed64(buffer: Uint8Array, i: number, number: Numeric): n
 
 /**
  * Submessage lengths for one encode, recorded in length-prefix order and read
- * back sequentially to avoid remeasuring. No state is stored on the messages.
+ * back sequentially to avoid remeasuring. No state is stored on the messages;
+ * the context is passed through measuring and encoding instead.
  */
 export type EncodeContext = {
   lengths: number[]
@@ -257,22 +258,6 @@ export function newEncodeContext(): EncodeContext {
   return { lengths: [], cursor: 0 }
 }
 
-let currentContext: EncodeContext | undefined
-
-/**
- * Runs `fn` in this context, then restores the previous one. Async encodes must
- * restore their context on each resume, since other encodes may run between yields.
- */
-export function withEncodeContext<R>(context: EncodeContext, fn: () => R): R {
-  const previous = currentContext
-  currentContext = context
-  try {
-    return fn()
-  } finally {
-    currentContext = previous
-  }
-}
-
 /**
  * Measures before encoding and records submessage lengths in an EncodeContext.
  * Do not mutate the message until encoding completes.
@@ -280,27 +265,22 @@ export function withEncodeContext<R>(context: EncodeContext, fn: () => R): R {
 export abstract class Message {
   /** The encoded length of the message in bytes. */
   get length(): number {
-    return this._measure()
+    return this._measure(newEncodeContext())
   }
 
-  /** Recorded length during encoding; measured on demand otherwise. */
-  get _recordedLength(): number {
-    const context = currentContext
-    return context === undefined ? this._measure() : context.lengths[context.cursor++]
-  }
+  /** Measures the message, recording its submessages' lengths in `context`. */
+  abstract _measure(context: EncodeContext): number
 
-  abstract _measure(): number
-
-  abstract _encodeToBuffer(buffer: Uint8Array, offset: number): number
+  /** Encodes the message, reading its submessages' lengths from `context`. */
+  abstract _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number
 
   /** Encodes into the given buffer or a new one. Throws RangeError if too small. */
   encode(buffer?: Uint8Array): Uint8Array {
-    return withEncodeContext(newEncodeContext(), () => {
-      const length = this._measure()
-      const target = prepareBuffer(buffer, length)
-      verifyEncodedLength(this._encodeToBuffer(target, 0), length)
-      return target
-    })
+    const context = newEncodeContext()
+    const length = this._measure(context)
+    const target = prepareBuffer(buffer, length)
+    verifyEncodedLength(this._encodeToBuffer(target, 0, context), length)
+    return target
   }
 }
 
@@ -435,39 +415,33 @@ export function encodeStringField(buffer: Uint8Array, offset: number, field: num
   return encodeBytesField(buffer, offset, field, utf8)
 }
 
-export function measureMessageField(field: number, message: Message | undefined): number {
+export function measureMessageField(field: number, message: Message | undefined, context: EncodeContext): number {
   if (message === undefined) return 0
-  const context = currentContext
-  let length
-  if (context === undefined) {
-    length = message._measure()
-  } else {
-    // Reserve the parent's slot first to match length-prefix order.
-    const slot = context.lengths.push(0) - 1
-    length = message._measure()
-    context.lengths[slot] = length
-  }
+  // Reserve the parent's slot first to match length-prefix order.
+  const slot = context.lengths.push(0) - 1
+  const length = message._measure(context)
+  context.lengths[slot] = length
   return measureTag(field) + varintLength(length) + length
 }
 
-export function encodeMessageField(buffer: Uint8Array, offset: number, field: number, message: Message | undefined): number {
+export function encodeMessageField(buffer: Uint8Array, offset: number, field: number, message: Message | undefined, context: EncodeContext): number {
   if (message === undefined) return offset
   offset = encodeTag(buffer, offset, field, kTypeLengthDelim)
-  offset = encodeNumber(buffer, offset, message._recordedLength)
-  return message._encodeToBuffer(buffer, offset)
+  offset = encodeNumber(buffer, offset, context.lengths[context.cursor++])
+  return message._encodeToBuffer(buffer, offset, context)
 }
 
-export function measureMessageArrayField(field: number, messages: Message[]): number {
+export function measureMessageArrayField(field: number, messages: Message[], context: EncodeContext): number {
   let total = 0
   for (const message of messages) {
-    total += measureMessageField(field, message)
+    total += measureMessageField(field, message, context)
   }
   return total
 }
 
-export function encodeMessageArrayField(buffer: Uint8Array, offset: number, field: number, messages: Message[]): number {
+export function encodeMessageArrayField(buffer: Uint8Array, offset: number, field: number, messages: Message[], context: EncodeContext): number {
   for (const message of messages) {
-    offset = encodeMessageField(buffer, offset, field, message)
+    offset = encodeMessageField(buffer, offset, field, message, context)
   }
   return offset
 }
