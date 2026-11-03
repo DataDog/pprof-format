@@ -26,8 +26,9 @@ const toUtf8 = typeof Buffer === 'undefined'
   ? (value: string) => new TextEncoder().encode(value)
   : (value: string) => Buffer.from(value, 'utf8')
 
-// A leading U+FEFF in a protobuf string is part of the string, not a byte order
-// mark, so it must not be stripped
+// Decode strings exactly as encoded. TextDecoder would otherwise strip a
+// leading U+FEFF as a byte order mark, which other protobuf implementations
+// keep: https://encoding.spec.whatwg.org/#dom-textdecoderoptions-ignorebom
 const textDecoder = new TextDecoder('utf-8', { ignoreBOM: true })
 
 type Numeric = number | bigint
@@ -1228,7 +1229,8 @@ export class Profile {
         data.durationNanos = decodeNumber(buffer, start, end)
         break
       case 11:
-        // Occurrences of a singular message field are merged
+        // Occurrences of a singular message field are merged:
+        // https://protobuf.dev/programming-guides/encoding/#last-one-wins
         data.periodType = new ValueType(
           decode(buffer, ValueType.decodeValue, start, end, { ...data.periodType }) as ValueTypeInput
         )

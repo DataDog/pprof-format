@@ -357,12 +357,20 @@ test('Profile docUrl', async (t) => {
 })
 
 test('decoding merges occurrences of a singular message field', () => {
-  // period_type { type: 1 } followed by period_type { unit: 2 }
-  const profile = Profile.decode(hexToBuf('5a020801' + '5a021002'))
+  // Concatenating encoded messages merges them, so each period_type becomes a
+  // separate occurrence of the field
+  const encodeWithProtobufjs = (data: object) => proto.perftools.profiles.Profile.encode(data).finish()
+  const profile = Profile.decode(Buffer.concat([
+    encodeWithProtobufjs({ periodType: { type: 1 } }),
+    encodeWithProtobufjs({ periodType: { unit: 2 } })
+  ]))
   assert.deepStrictEqual({ ...profile.periodType }, { ...new ValueType({ type: 1, unit: 2 }) })
 
   // A later occurrence overrides the fields it sets
-  const overridden = Profile.decode(hexToBuf('5a0408011002' + '5a020803'))
+  const overridden = Profile.decode(Buffer.concat([
+    encodeWithProtobufjs({ periodType: { type: 1, unit: 2 } }),
+    encodeWithProtobufjs({ periodType: { type: 3 } })
+  ]))
   assert.deepStrictEqual({ ...overridden.periodType }, { ...new ValueType({ type: 3, unit: 2 }) })
 })
 
