@@ -28,12 +28,11 @@ import {
   prepareBuffer,
   push,
   pushAll,
-  toUtf8,
   verifyEncodedLength,
 } from './protobuf.js'
-import { StringTableBase, emptyTableToken, encodeStringEntry } from './string-table.js'
+import { StringTable, emptyTableToken } from './string-table.js'
 
-export { emptyTableToken }
+export { StringTable, emptyTableToken }
 
 /**
  * Yields to the event loop. Uses setImmediate where available (Node.js), and
@@ -118,22 +117,6 @@ const enum ProfileField {
   comment = 13,
   defaultSampleType = 14,
   docUrl = 15,
-}
-
-/** The pprof string table, stored in Profile.string_table. */
-export class StringTable extends StringTableBase {
-  /** @param tok - emptyTableToken omits the initial empty string. */
-  constructor(tok?: typeof emptyTableToken) {
-    super(tok, ProfileField.stringTable)
-  }
-
-  static _encodeStringFromUtf8(stringBuffer: Uint8Array | Buffer): Uint8Array {
-    return encodeStringEntry(stringBuffer, ProfileField.stringTable)
-  }
-
-  static _encodeString(string: string): Uint8Array {
-    return StringTable._encodeStringFromUtf8(toUtf8(string))
-  }
 }
 
 export type ValueTypeInput = {
@@ -653,9 +636,6 @@ export class Profile extends Message {
 
   constructor(data: ProfileInput = {}) {
     super()
-    if (data.stringTable !== undefined && !(data.stringTable instanceof StringTable)) {
-      throw new TypeError('Profile.stringTable must be a pprof StringTable')
-    }
     this.sampleType = (data.sampleType || []).map(ValueType.create)
     this.sample = (data.sample || []).map(Sample.create)
     this.mapping = (data.mapping || []).map(Mapping.create)
@@ -680,7 +660,7 @@ export class Profile extends Message {
     total += measureMessageArrayField(ProfileField.mapping, this.mapping, context)
     total += measureMessageArrayField(ProfileField.location, this.location, context)
     total += measureMessageArrayField(ProfileField.function, this.function, context)
-    total += this.stringTable.encodedLength
+    total += this.stringTable._measure(ProfileField.stringTable)
     total += measureNumberField(ProfileField.dropFrames, this.dropFrames)
     total += measureNumberField(ProfileField.keepFrames, this.keepFrames)
     total += measureNumberField(ProfileField.timeNanos, this.timeNanos)
@@ -732,7 +712,7 @@ export class Profile extends Message {
     offset = this._encodeMappingsToBuffer(buffer, offset, context)
     offset = this._encodeLocationsToBuffer(buffer, offset, context)
     offset = this._encodeFunctionsToBuffer(buffer, offset, context)
-    offset = this.stringTable._encodeToBuffer(buffer, offset)
+    offset = this.stringTable._encodeToBuffer(buffer, offset, ProfileField.stringTable)
     offset = this._encodeBasicValuesToBuffer(buffer, offset, context)
     return offset
   }
@@ -754,7 +734,7 @@ export class Profile extends Message {
     offset = this._encodeFunctionsToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = this.stringTable._encodeToBuffer(buffer, offset)
+    offset = this.stringTable._encodeToBuffer(buffer, offset, ProfileField.stringTable)
     await yieldToEventLoop()
 
     offset = this._encodeBasicValuesToBuffer(buffer, offset, context)

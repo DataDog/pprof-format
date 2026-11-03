@@ -35,7 +35,6 @@ import {
   newEncodeContext
 } from './protobuf.js'
 import { Label, LabelInput, Profile, Sample, StringTable, ValueType } from './index.js'
-import { StringTableBase } from './string-table.js'
 
 function hex(buf: Uint8Array) {
   return Buffer.from(buf).toString('hex')
@@ -276,20 +275,18 @@ test('decoders skip unknown fields of all wire types', () => {
   assert.deepStrictEqual(wireTypes, [kTypeVarInt, kTypeFixed64, kTypeLengthDelim, kTypeFixed32])
 })
 
-test('StringTable field number', () => {
-  class FieldFiveTable extends StringTableBase {
-    constructor() {
-      super(undefined, 5)
-    }
-  }
-  const table = new FieldFiveTable()
+test('StringTable is encoded as the field its message supplies', () => {
+  const table = new StringTable()
   table.dedup('hi')
-  assert.strictEqual(hex(table.encode()), '2a00' + '2a026869')
-  assert.strictEqual(hex(new StringTable().encode()), '3200')
-  assert.throws(
-    () => new Profile({ stringTable: table as StringTable }),
-    { name: 'TypeError', message: /must be a pprof StringTable/ }
-  )
+  for (const [field, entries] of [[5, '2a00' + '2a026869'], [16, '820100' + '8201026869']] as const) {
+    const buffer = new Uint8Array(table._measure(field))
+    assert.strictEqual(table._encodeToBuffer(buffer, 0, field), buffer.length, `measured length of field ${field}`)
+    assert.strictEqual(hex(buffer), entries)
+  }
+  // On its own, and in a profile, the table is pprof's string_table
+  assert.strictEqual(hex(table.encode()), '3200' + '32026869')
+  assert.strictEqual(table.encodedLength, 6)
+  assert.strictEqual(hex(new Profile({ stringTable: table }).encode()), '3200' + '32026869')
 })
 
 test('encoding checks', async (t) => {
