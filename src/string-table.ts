@@ -67,21 +67,22 @@ export abstract class StringTableBase {
     return buffer
   }
 
-  dedup(string: string): number {
-    if (typeof string === 'number') return string
-    if (!this.#positions.has(string)) {
-      const pos = this.strings.push(string) - 1
-      this.#positions.set(string, pos)
+  dedup(value: string): number {
+    if (typeof value === 'number') return value
+    let position = this.#positions.get(value)
+    if (position === undefined) {
+      position = this.strings.push(value) - 1
+      this.#positions.set(value, position)
 
       // Encode strings on insertion
-      this.#encodings.push(encodeStringEntry(toUtf8(string), this.#field))
+      this.#encodings.push(encodeStringEntry(toUtf8(value), this.#field))
     }
-    return this.#positions.get(string)!
+    return position
   }
 
   _decodeString(buffer: Uint8Array) {
-    const string = decodeString(buffer)
-    this.#positions.set(string, this.strings.push(string) - 1)
+    const value = decodeString(buffer)
+    this.#positions.set(value, this.strings.push(value) - 1)
     this.#encodings.push(encodeStringEntry(buffer, this.#field))
   }
 }

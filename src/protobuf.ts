@@ -528,8 +528,8 @@ export function encodeMessageArrayField(buffer: Uint8Array, offset: number, fiel
 }
 
 /*
- * Skip mismatched wire types like unknown fields. Accept undefined for callers
- * that omit the optional wire type when calling decodeValue directly.
+ * Skip mismatched wire types like unknown fields. An undefined wire type means
+ * the caller omitted it when calling decodeValue directly, and is accepted.
  */
 
 export function isVarInt(wireType: number | undefined): boolean {
@@ -540,13 +540,13 @@ export function isLengthDelim(wireType: number | undefined): boolean {
   return wireType === undefined || wireType === kTypeLengthDelim
 }
 
+export function isFixed64(wireType: number | undefined): boolean {
+  return wireType === undefined || wireType === kTypeFixed64
+}
+
 /** Accepts both packed and unpacked varints for repeated fields. */
 export function isPackedOrVarInt(wireType: number | undefined): boolean {
   return isVarInt(wireType) || wireType === kTypeLengthDelim
-}
-
-export function isFixed64(wireType: number | undefined): boolean {
-  return wireType === undefined || wireType === kTypeFixed64
 }
 
 /**
