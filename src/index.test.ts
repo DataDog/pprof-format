@@ -356,6 +356,31 @@ test('Profile docUrl', async (t) => {
   })
 })
 
+test('decoding merges occurrences of a singular message field', () => {
+  // Concatenating encoded messages merges them, so each period_type becomes a
+  // separate occurrence of the field
+  const encodeWithProtobufjs = (data: object) => proto.perftools.profiles.Profile.encode(data).finish()
+  const profile = Profile.decode(Buffer.concat([
+    encodeWithProtobufjs({ periodType: { type: 1 } }),
+    encodeWithProtobufjs({ periodType: { unit: 2 } })
+  ]))
+  assert.deepStrictEqual({ ...profile.periodType }, { ...new ValueType({ type: 1, unit: 2 }) })
+
+  // A later occurrence overrides the fields it sets
+  const overridden = Profile.decode(Buffer.concat([
+    encodeWithProtobufjs({ periodType: { type: 1, unit: 2 } }),
+    encodeWithProtobufjs({ periodType: { type: 3 } })
+  ]))
+  assert.deepStrictEqual({ ...overridden.periodType }, { ...new ValueType({ type: 3, unit: 2 }) })
+})
+
+test('decoding preserves a leading U+FEFF in strings', () => {
+  const stringTable = new StringTable()
+  stringTable.dedup('\uFEFFhello')
+  const decoded = Profile.decode(new Profile({ stringTable }).encode())
+  assert.deepStrictEqual(decoded.stringTable.strings, ['', '\uFEFFhello'])
+})
+
 test('decoding a byte range', async (t) => {
   await t.test('ignores bytes outside the range', () => {
     const label = '08041005187b2006'

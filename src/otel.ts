@@ -60,9 +60,9 @@ import {
   verifyEncodedLength,
   yieldToEventLoop,
 } from './protobuf.js'
-import { StringTableBase, emptyTableToken } from './string-table.js'
+import { StringTable, emptyTableToken } from './string-table.js'
 
-export { emptyTableToken }
+export { StringTable, emptyTableToken }
 
 /*
  * Each message is preceded by a const enum of its field numbers, as declared
@@ -91,13 +91,6 @@ function decodeInt64s(buffer: Uint8Array, start: number, end: number): Numeric[]
 // Copy into a plain Uint8Array so decoded messages don't retain the input.
 function decodeBytes(buffer: Uint8Array, start: number, end: number): Uint8Array {
   return new Uint8Array(buffer.subarray(start, end))
-}
-
-/** Dictionary string table, with the required empty string at index 0. */
-export class StringTable extends StringTableBase {
-  constructor(tok?: typeof emptyTableToken) {
-    super(tok, ProfilesDictionaryField.stringTable)
-  }
 }
 
 /*
@@ -659,10 +652,6 @@ export class ProfilesDictionary extends Message {
 
   constructor(data: ProfilesDictionaryInput = {}) {
     super()
-    if (data.stringTable !== undefined && !(data.stringTable instanceof StringTable)) {
-      // pprof uses field 6 for strings; OTel uses field 5.
-      throw new TypeError('ProfilesDictionary.stringTable must be an OTel StringTable')
-    }
     this.mappingTable = data.mappingTable ? data.mappingTable.map(Mapping.create) : [new Mapping()]
     this.locationTable = data.locationTable ? data.locationTable.map(Location.create) : [new Location()]
     this.functionTable = data.functionTable ? data.functionTable.map(Function.create) : [new Function()]
@@ -678,7 +667,7 @@ export class ProfilesDictionary extends Message {
     total += measureMessageArrayField(ProfilesDictionaryField.locationTable, this.locationTable, context)
     total += measureMessageArrayField(ProfilesDictionaryField.functionTable, this.functionTable, context)
     total += measureMessageArrayField(ProfilesDictionaryField.linkTable, this.linkTable, context)
-    total += this.stringTable.encodedLength
+    total += this.stringTable._measure(ProfilesDictionaryField.stringTable)
     total += measureMessageArrayField(ProfilesDictionaryField.attributeTable, this.attributeTable, context)
     total += measureMessageArrayField(ProfilesDictionaryField.stackTable, this.stackTable, context)
     return total
@@ -689,7 +678,7 @@ export class ProfilesDictionary extends Message {
     offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.locationTable, this.locationTable, context)
     offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.functionTable, this.functionTable, context)
     offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.linkTable, this.linkTable, context)
-    offset = this.stringTable._encodeToBuffer(buffer, offset)
+    offset = this.stringTable._encodeToBuffer(buffer, offset, ProfilesDictionaryField.stringTable)
     offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.attributeTable, this.attributeTable, context)
     offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.stackTable, this.stackTable, context)
     return offset
@@ -707,7 +696,7 @@ export class ProfilesDictionary extends Message {
     offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.linkTable, this.linkTable, context)
     await yieldToEventLoop()
 
-    offset = this.stringTable._encodeToBuffer(buffer, offset)
+    offset = this.stringTable._encodeToBuffer(buffer, offset, ProfilesDictionaryField.stringTable)
     await yieldToEventLoop()
 
     offset = encodeMessageArrayField(buffer, offset, ProfilesDictionaryField.attributeTable, this.attributeTable, context)

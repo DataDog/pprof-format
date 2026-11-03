@@ -312,11 +312,13 @@ test('ProfilesDictionary', async (t) => {
     assert.strictEqual(hex(dictionary.encode()), '0a00' + '1200' + '1a00' + '2200' + '2a00' + '3200' + '3a00')
   })
 
-  await t.test('rejects a pprof string table', () => {
-    assert.throws(() => new ProfilesDictionary({ stringTable: new PprofStringTable() as StringTable }), {
-      name: 'TypeError',
-      message: /must be an OTel StringTable/
-    })
+  await t.test('encodes the string table shared with pprof as its own field', () => {
+    assert.strictEqual(StringTable, PprofStringTable)
+    const strings = new PprofStringTable()
+    strings.dedup('a')
+    const dictionary = new ProfilesDictionary({ stringTable: strings })
+    assert.ok(hex(dictionary.encode()).includes('2a00' + '2a0161'), 'string_table is field 5')
+    assert.deepStrictEqual(ProfilesDictionary.decode(dictionary.encode()).stringTable.strings, ['', 'a'])
   })
 })
 
