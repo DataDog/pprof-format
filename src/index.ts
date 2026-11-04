@@ -4,12 +4,35 @@
  * This product includes software developed at Datadog (https://www.datadoghq.com/  Copyright 2022 Datadog, Inc.
  */
 
-/*!
- * Private helpers. These are only used by other helpers.
- */
-const lowMaxBig = 2n ** 32n - 1n
-const lowMax = 2 ** 32 - 1
-const lowMaxPlus1 = lowMax + 1
+import {
+  EncodeContext,
+  Message,
+  Numeric,
+  decodeFields,
+  decodeNumber,
+  decodeNumbers,
+  encodeBoolField,
+  encodeMessageArrayField,
+  encodeMessageField,
+  encodeNumberField,
+  encodePackedNumbersField,
+  isLengthDelim,
+  isPackedOrVarInt,
+  isVarInt,
+  measureBoolField,
+  measureMessageArrayField,
+  measureMessageField,
+  measureNumberField,
+  measurePackedNumbersField,
+  newEncodeContext,
+  prepareBuffer,
+  push,
+  pushAll,
+  verifyEncodedLength,
+} from './protobuf.js'
+import { StringTable, emptyTableToken } from './string-table.js'
+
+export { StringTable, emptyTableToken }
 
 /**
  * Yields to the event loop. Uses setImmediate where available (Node.js), and
@@ -21,334 +44,79 @@ function yieldToEventLoop(): Promise<void> {
     : new Promise(resolve => setTimeout(resolve, 0))
 }
 
-// Buffer.from(string, 'utf8') is faster, when available
-const toUtf8 = typeof Buffer === 'undefined'
-  ? (value: string) => new TextEncoder().encode(value)
-  : (value: string) => Buffer.from(value, 'utf8')
-
-// Decode strings exactly as encoded. TextDecoder would otherwise strip a
-// leading U+FEFF as a byte order mark, which other protobuf implementations
-// keep: https://encoding.spec.whatwg.org/#dom-textdecoderoptions-ignorebom
-const textDecoder = new TextDecoder('utf-8', { ignoreBOM: true })
-
-type Numeric = number | bigint
-
-type DeepPartial<T> = {
-  [P in keyof T]?: DeepPartial<T[P]>
-}
-
-function decodeBigNumber(buffer: Uint8Array, start = 0): bigint {
-  if (start >= buffer.length) return BigInt(0)
-  // The low 4 bytes hold 28 bits and the rest at most 42, so both fit in a
-  // Number exactly
-  let lo = 0
-  let hi = 0
-  let fac = 1
-  let i = 0
-  let byte
-  do {
-    byte = buffer[start + i]
-    if (i < 4) {
-      lo |= (byte & 0b01111111) << (7 * i)
-    } else {
-      hi += (byte & 0b01111111) * fac
-      fac *= 128
-    }
-    i++
-  } while (byte >= 0b10000000)
-  if (hi < 2 ** 25) return BigInt(hi * 2 ** 28 + lo)
-  return (BigInt(hi) << 28n) | BigInt(lo)
-}
-
-// Decodes a varint of at most 4 bytes spanning buffer[start..end)
-function decodeSmallNumber(buffer: Uint8Array, start: number, end: number): number {
-  let value = 0
-  for (let i = start; i < end; i++) {
-    value |= (buffer[i] & 0b01111111) << (7 * (i - start))
-  }
-  return value
-}
-
-function lowBits(number: Numeric): number {
-  return typeof number !== 'bigint'
-    ? (number >>> 0) % lowMaxPlus1
-    : Number(number & lowMaxBig)
-}
-
-function highBits(number: Numeric): number {
-  return typeof number !== 'bigint'
-    ? (number / lowMaxPlus1) >>> 0
-    : Number(number >> 32n & lowMaxBig)
-}
-
-function long(number: Numeric): Array<number> {
-  const sign = number < 0
-  if (sign) number = -number
-
-  let lo = lowBits(number)
-  let hi = highBits(number)
-
-  if (sign) {
-    hi = ~hi >>> 0
-    lo = ~lo >>> 0
-    if (++lo > lowMax) {
-      lo = 0
-      if (++hi > lowMax) { hi = 0 }
-    }
-  }
-
-  return [hi, lo]
-}
-
-/**
- * Public helpers. These are used in the type definitions.
+/*
+ * Field numbers of the messages, as declared in pprof's profile.proto. Const
+ * enums are inlined at compile time, so they cost nothing at run time.
  */
-const kTypeVarInt = 0
-const kTypeLengthDelim = 2
-
-// Decodes the varint spanning buffer[start..end)
-function decodeNumber(buffer: Uint8Array, start = 0, end = buffer.length): Numeric {
-  if (end - start > 4) return decodeBigNumber(buffer, start)
-  return decodeSmallNumber(buffer, start, end)
+const enum ValueTypeField {
+  type = 1,
+  unit = 2,
 }
 
-function decodeNumbers(buffer: Uint8Array, from = 0, to = buffer.length): Array<Numeric> {
-  const values = []
-  let start = from
-
-  for (let i = from; i < to; i++) {
-    if ((buffer[i] & 0b10000000) === 0) {
-      if (i - start >= 4) {
-        values.push(decodeBigNumber(buffer, start))
-      } else {
-        values.push(decodeSmallNumber(buffer, start, i + 1))
-      }
-      start = i + 1
-    }
-  }
-
-  return values
+const enum LabelField {
+  key = 1,
+  str = 2,
+  num = 3,
+  numUnit = 4,
 }
 
-function push<T>(value: T, list?: Array<T>): Array<T> {
-  if (list == null) {
-    return [value]
-  }
-  list.push(value)
-  return list
+const enum SampleField {
+  locationId = 1,
+  value = 2,
+  label = 3,
 }
 
-function pushAll<T>(values: Array<T>, list?: Array<T>): Array<T> {
-  if (list == null) {
-    return values
-  }
-  for (const value of values) {
-    list.push(value)
-  }
-  return list
+const enum MappingField {
+  id = 1,
+  memoryStart = 2,
+  memoryLimit = 3,
+  fileOffset = 4,
+  filename = 5,
+  buildId = 6,
+  hasFunctions = 7,
+  hasFilenames = 8,
+  hasLineNumbers = 9,
+  hasInlineFrames = 10,
 }
 
-function measureNumber(number: Numeric): number {
-  if (number === 0 || number === 0n) return 0
-  const [hi, lo] = long(number)
-
-  const a = lo
-  const b = (lo >>> 28 | hi << 4) >>> 0
-  const c = hi >>> 24
-
-  if (c !== 0) {
-    return c < 128 ? 9 : 10
-  }
-
-  if (b !== 0) {
-    if (b < 16384) {
-      return b < 128 ? 5 : 6
-    }
-
-    return b < 2097152 ? 7 : 8
-  }
-
-  if (a < 16384) {
-    return a < 128 ? 1 : 2
-  }
-
-  return a < 2097152 ? 3 : 4
+const enum LineField {
+  functionId = 1,
+  line = 2,
+  column = 3,
 }
 
-function measureValue<T>(value: T): number {
-  if (typeof value === 'undefined') return 0
-  if (typeof value === 'number' || typeof value === 'bigint') {
-    return measureNumber(value) || 1
-  }
-  return (value as Array<T>).length
+const enum LocationField {
+  id = 1,
+  mappingId = 2,
+  address = 3,
+  line = 4,
+  isFolded = 5,
 }
 
-function measureArray<T>(list: Array<T>): number {
-  let size = 0
-  for (const item of list) {
-    size += measureValue(item)
-  }
-  return size
+const enum FunctionField {
+  id = 1,
+  name = 2,
+  systemName = 3,
+  filename = 4,
+  startLine = 5,
 }
 
-function measureNumberField(number: Numeric): number {
-  const length = measureNumber(number)
-  return length ? 1 + length : 0
-}
-
-function measureNumberArrayField(values: Numeric[]): number {
-  let total = 0
-  for (const value of values) {
-    // Arrays should always include zeros to keep positions consistent
-    total += measureNumber(value) || 1
-  }
-  // Packed arrays are encoded as Tag,Len,ConcatenatedElements
-  // Tag is only one byte because field number is always < 16 in pprof
-  return total ? 1 + measureNumber(total) + total : 0
-}
-
-function measureLengthDelimField<T>(value: T): number {
-  const length = measureValue(value)
-  // Length delimited records / submessages are encoded as Tag,Len,EncodedRecord
-  // Tag is only one byte because field number is always < 16 in pprof
-  return length ? 1 + measureNumber(length) + length : 0
-}
-
-function measureLengthDelimArrayField<T>(values: T[]): number {
-  let total = 0
-  for (const value of values) {
-    total += measureLengthDelimField(value)
-  }
-  return total
-}
-
-function encodeNumber(buffer: Uint8Array, i: number, number: Numeric): number {
-  if (number === 0 || number === 0n) {
-    buffer[i++] = 0
-    return i
-  }
-
-  let [hi, lo] = long(number)
-
-  while (hi) {
-    buffer[i++] = lo & 127 | 128
-    lo = (lo >>> 7 | hi << 25) >>> 0
-    hi >>>= 7
-  }
-  while (lo > 127) {
-    buffer[i++] = lo & 127 | 128
-    lo = lo >>> 7
-  }
-  buffer[i++] = lo
-
-  return i
-}
-
-export const emptyTableToken = Symbol()
-
-export class StringTable {
-  strings = new Array<string>()
-  #encodings = new Array<Uint8Array>()
-  #positions = new Map<string, number>()
-
-  constructor(tok?: typeof emptyTableToken) {
-    if (tok !== emptyTableToken) {
-      this.dedup('')
-    }
-  }
-
-  get encodedLength(): number {
-    let size = 0
-    for (const encoded of this.#encodings) {
-      size += encoded.length
-    }
-    return size
-  }
-
-  _encodeToBuffer(buffer: Uint8Array, offset: number): number {
-    for (const encoded of this.#encodings) {
-      buffer.set(encoded, offset)
-      offset += encoded.length
-    }
-    return offset
-  }
-
-  encode(buffer = new Uint8Array(this.encodedLength)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
-  }
-
-  static _encodeStringFromUtf8(stringBuffer: Uint8Array | Buffer): Uint8Array {
-    const buffer = new Uint8Array(1 + stringBuffer.length + (measureNumber(stringBuffer.length) || 1))
-    let offset = 0
-    buffer[offset++] = 50 // (6 << 3) + kTypeLengthDelim
-    offset = encodeNumber(buffer, offset, stringBuffer.length)
-    if (stringBuffer.length > 0) {
-      buffer.set(stringBuffer, offset)
-    }
-    return buffer
-  }
-
-  static _encodeString(string: string): Uint8Array {
-    return StringTable._encodeStringFromUtf8(toUtf8(string))
-  }
-
-  dedup(string: string): number {
-    if (typeof string === 'number') return string
-    if (!this.#positions.has(string)) {
-      const pos = this.strings.push(string) - 1
-      this.#positions.set(string, pos)
-
-      // Encode strings on insertion
-      this.#encodings.push(StringTable._encodeString(string))
-    }
-    return this.#positions.get(string)!
-  }
-
-  _decodeString(buffer: Uint8Array) {
-    const string = textDecoder.decode(buffer)
-    this.#positions.set(string, this.strings.push(string) - 1)
-    this.#encodings.push(StringTable._encodeStringFromUtf8(buffer))
-  }
-}
-
-function decode<T>(
-  buffer: Uint8Array,
-  decoder: (data: any, field: number, buffer: Uint8Array, start: number, end: number) => void,
-  from: number,
-  to: number,
-  data: any = {}
-): DeepPartial<T> {
-  let index = from
-
-  while (index < to) {
-    const field = buffer[index] >> 3
-    const mode = buffer[index] & 0b111
-    index++
-
-    let start = index
-    let end = index
-    switch (mode) {
-      case kTypeVarInt:
-        while (end < to && buffer[end++] >= 0b10000000);
-        break
-      case kTypeLengthDelim: {
-        while (start < to && buffer[start++] >= 0b10000000);
-        const size = start - index > 4
-          ? Number(decodeBigNumber(buffer, index))
-          : decodeSmallNumber(buffer, index, start)
-        end = Math.min(start + size, to)
-        break
-      }
-      default:
-        throw new Error(`Unrecognized value type: ${mode}`)
-    }
-
-    decoder(data, field, buffer, start, end)
-    index = end
-  }
-
-  return data
+const enum ProfileField {
+  sampleType = 1,
+  sample = 2,
+  mapping = 3,
+  location = 4,
+  function = 5,
+  stringTable = 6,
+  dropFrames = 7,
+  keepFrames = 8,
+  timeNanos = 9,
+  durationNanos = 10,
+  periodType = 11,
+  period = 12,
+  comment = 13,
+  defaultSampleType = 14,
+  docUrl = 15,
 }
 
 export type ValueTypeInput = {
@@ -356,7 +124,7 @@ export type ValueTypeInput = {
   unit?: Numeric
 }
 
-export class ValueType {
+export class ValueType extends Message {
   type: Numeric
   unit: Numeric
 
@@ -365,49 +133,37 @@ export class ValueType {
   }
 
   constructor(data: ValueTypeInput) {
+    super()
     this.type = data.type || 0
     this.unit = data.unit || 0
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureNumberField(this.type)
-    total += measureNumberField(this.unit)
+    total += measureNumberField(ValueTypeField.type, this.type)
+    total += measureNumberField(ValueTypeField.unit, this.unit)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.type) {
-      buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.type)
-    }
-
-    if (this.unit) {
-      buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.unit)
-    }
-
+    offset = encodeNumberField(buffer, offset, ValueTypeField.type, this.type)
+    offset = encodeNumberField(buffer, offset, ValueTypeField.unit, this.unit)
     return offset
   }
 
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
-  }
-
-  static decodeValue(data: ValueTypeInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: ValueTypeInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
-      case 1:
-        data.type = decodeNumber(buffer, start, end)
+      case ValueTypeField.type:
+        if (isVarInt(wireType)) data.type = decodeNumber(buffer, start, end)
         break
-      case 2:
-        data.unit = decodeNumber(buffer, start, end)
+      case ValueTypeField.unit:
+        if (isVarInt(wireType)) data.unit = decodeNumber(buffer, start, end)
         break
     }
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): ValueType {
-    return new this(decode(buffer, this.decodeValue, start, end) as ValueTypeInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -418,7 +174,7 @@ export type LabelInput = {
   numUnit?: Numeric
 }
 
-export class Label {
+export class Label extends Message {
   key: Numeric
   str: Numeric
   num: Numeric
@@ -429,69 +185,49 @@ export class Label {
   }
 
   constructor(data: LabelInput) {
+    super()
     this.key = data.key || 0
     this.str = data.str || 0
     this.num = data.num || 0
     this.numUnit = data.numUnit || 0
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureNumberField(this.key)
-    total += measureNumberField(this.str)
-    total += measureNumberField(this.num)
-    total += measureNumberField(this.numUnit)
+    total += measureNumberField(LabelField.key, this.key)
+    total += measureNumberField(LabelField.str, this.str)
+    total += measureNumberField(LabelField.num, this.num)
+    total += measureNumberField(LabelField.numUnit, this.numUnit)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.key) {
-      buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.key)
-    }
-
-    if (this.str) {
-      buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.str)
-    }
-
-    if (this.num) {
-      buffer[offset++] = 24 // (3 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.num)
-    }
-
-    if (this.numUnit) {
-      buffer[offset++] = 32 // (4 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.numUnit)
-    }
-
+    offset = encodeNumberField(buffer, offset, LabelField.key, this.key)
+    offset = encodeNumberField(buffer, offset, LabelField.str, this.str)
+    offset = encodeNumberField(buffer, offset, LabelField.num, this.num)
+    offset = encodeNumberField(buffer, offset, LabelField.numUnit, this.numUnit)
     return offset
   }
 
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
-  }
-
-  static decodeValue(data: LabelInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: LabelInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
-      case 1:
-        data.key = decodeNumber(buffer, start, end)
+      case LabelField.key:
+        if (isVarInt(wireType)) data.key = decodeNumber(buffer, start, end)
         break
-      case 2:
-        data.str = decodeNumber(buffer, start, end)
+      case LabelField.str:
+        if (isVarInt(wireType)) data.str = decodeNumber(buffer, start, end)
         break
-      case 3:
-        data.num = decodeNumber(buffer, start, end)
+      case LabelField.num:
+        if (isVarInt(wireType)) data.num = decodeNumber(buffer, start, end)
         break
-      case 4:
-        data.numUnit = decodeNumber(buffer, start, end)
+      case LabelField.numUnit:
+        if (isVarInt(wireType)) data.numUnit = decodeNumber(buffer, start, end)
         break
     }
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Label {
-    return new this(decode(buffer, this.decodeValue, start, end) as LabelInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -501,7 +237,7 @@ export type SampleInput = {
   label?: Array<LabelInput>
 }
 
-export class Sample {
+export class Sample extends Message {
   locationId: Array<Numeric>
   value: Array<Numeric>
   label: Array<Label>
@@ -511,66 +247,43 @@ export class Sample {
   }
 
   constructor(data: SampleInput) {
+    super()
     this.locationId = data.locationId || []
     this.value = data.value || []
     this.label = (data.label || []).map(Label.create)
   }
 
-  get length() {
+  _measure(context: EncodeContext) {
     let total = 0
-    total += measureNumberArrayField(this.locationId)
-    total += measureNumberArrayField(this.value)
-    total += measureLengthDelimArrayField(this.label)
+    total += measurePackedNumbersField(SampleField.locationId, this.locationId)
+    total += measurePackedNumbersField(SampleField.value, this.value)
+    total += measureMessageArrayField(SampleField.label, this.label, context)
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.locationId.length) {
-      buffer[offset++] = 10 // (1 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, measureArray(this.locationId))
-      for (const locationId of this.locationId) {
-        offset = encodeNumber(buffer, offset, locationId)
-      }
-    }
-
-    if (this.value.length) {
-      buffer[offset++] = 18 // (2 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, measureArray(this.value))
-      for (const value of this.value) {
-        offset = encodeNumber(buffer, offset, value)
-      }
-    }
-
-    for (const label of this.label) {
-      buffer[offset++] = 26 // (3 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, label.length)
-      offset = label._encodeToBuffer(buffer, offset)
-    }
-
+  _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    offset = encodePackedNumbersField(buffer, offset, SampleField.locationId, this.locationId)
+    offset = encodePackedNumbersField(buffer, offset, SampleField.value, this.value)
+    offset = encodeMessageArrayField(buffer, offset, SampleField.label, this.label, context)
     return offset
   }
 
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
-  }
-
-  static decodeValue(data: SampleInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: SampleInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
-      case 1:
-        data.locationId = pushAll(decodeNumbers(buffer, start, end), data.locationId)
+      case SampleField.locationId:
+        if (isPackedOrVarInt(wireType)) data.locationId = pushAll(decodeNumbers(buffer, start, end), data.locationId)
         break
-      case 2:
-        data.value = pushAll(decodeNumbers(buffer, start, end), data.value)
+      case SampleField.value:
+        if (isPackedOrVarInt(wireType)) data.value = pushAll(decodeNumbers(buffer, start, end), data.value)
         break
-      case 3:
-        data.label = push(Label.decode(buffer, start, end), data.label)
+      case SampleField.label:
+        if (isLengthDelim(wireType)) data.label = push(Label.decode(buffer, start, end), data.label)
         break
     }
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Sample {
-    return new this(decode(buffer, this.decodeValue, start, end) as SampleInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -587,7 +300,7 @@ export type MappingInput = {
   hasInlineFrames?: boolean
 }
 
-export class Mapping {
+export class Mapping extends Message {
   id: Numeric
   memoryStart: Numeric
   memoryLimit: Numeric
@@ -604,6 +317,7 @@ export class Mapping {
   }
 
   constructor(data: MappingInput) {
+    super()
     this.id = data.id || 0
     this.memoryStart = data.memoryStart || 0
     this.memoryLimit = data.memoryLimit || 0
@@ -616,107 +330,72 @@ export class Mapping {
     this.hasInlineFrames = !!data.hasInlineFrames
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureNumberField(this.id)
-    total += measureNumberField(this.memoryStart)
-    total += measureNumberField(this.memoryLimit)
-    total += measureNumberField(this.fileOffset)
-    total += measureNumberField(this.filename)
-    total += measureNumberField(this.buildId)
-    total += measureNumberField(this.hasFunctions ? 1 : 0)
-    total += measureNumberField(this.hasFilenames ? 1 : 0)
-    total += measureNumberField(this.hasLineNumbers ? 1 : 0)
-    total += measureNumberField(this.hasInlineFrames ? 1 : 0)
+    total += measureNumberField(MappingField.id, this.id)
+    total += measureNumberField(MappingField.memoryStart, this.memoryStart)
+    total += measureNumberField(MappingField.memoryLimit, this.memoryLimit)
+    total += measureNumberField(MappingField.fileOffset, this.fileOffset)
+    total += measureNumberField(MappingField.filename, this.filename)
+    total += measureNumberField(MappingField.buildId, this.buildId)
+    total += measureBoolField(MappingField.hasFunctions, this.hasFunctions)
+    total += measureBoolField(MappingField.hasFilenames, this.hasFilenames)
+    total += measureBoolField(MappingField.hasLineNumbers, this.hasLineNumbers)
+    total += measureBoolField(MappingField.hasInlineFrames, this.hasInlineFrames)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.id) {
-      buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.id)
-    }
-    if (this.memoryStart) {
-      buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.memoryStart)
-    }
-    if (this.memoryLimit) {
-      buffer[offset++] = 24 // (3 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.memoryLimit)
-    }
-    if (this.fileOffset) {
-      buffer[offset++] = 32 // (4 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.fileOffset)
-    }
-    if (this.filename) {
-      buffer[offset++] = 40 // (5 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.filename)
-    }
-    if (this.buildId) {
-      buffer[offset++] = 48 // (6 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.buildId)
-    }
-    if (this.hasFunctions) {
-      buffer[offset++] = 56 // (7 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, 1)
-    }
-    if (this.hasFilenames) {
-      buffer[offset++] = 64 // (8 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, 1)
-    }
-    if (this.hasLineNumbers) {
-      buffer[offset++] = 72 // (9 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, 1)
-    }
-    if (this.hasInlineFrames) {
-      buffer[offset++] = 80 // (10 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, 1)
-    }
+    offset = encodeNumberField(buffer, offset, MappingField.id, this.id)
+    offset = encodeNumberField(buffer, offset, MappingField.memoryStart, this.memoryStart)
+    offset = encodeNumberField(buffer, offset, MappingField.memoryLimit, this.memoryLimit)
+    offset = encodeNumberField(buffer, offset, MappingField.fileOffset, this.fileOffset)
+    offset = encodeNumberField(buffer, offset, MappingField.filename, this.filename)
+    offset = encodeNumberField(buffer, offset, MappingField.buildId, this.buildId)
+    offset = encodeBoolField(buffer, offset, MappingField.hasFunctions, this.hasFunctions)
+    offset = encodeBoolField(buffer, offset, MappingField.hasFilenames, this.hasFilenames)
+    offset = encodeBoolField(buffer, offset, MappingField.hasLineNumbers, this.hasLineNumbers)
+    offset = encodeBoolField(buffer, offset, MappingField.hasInlineFrames, this.hasInlineFrames)
     return offset
   }
 
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
-  }
-
-  static decodeValue(data: MappingInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: MappingInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
-      case 1:
-        data.id = decodeNumber(buffer, start, end)
+      case MappingField.id:
+        if (isVarInt(wireType)) data.id = decodeNumber(buffer, start, end)
         break
-      case 2:
-        data.memoryStart = decodeNumber(buffer, start, end)
+      case MappingField.memoryStart:
+        if (isVarInt(wireType)) data.memoryStart = decodeNumber(buffer, start, end)
         break
-      case 3:
-        data.memoryLimit = decodeNumber(buffer, start, end)
+      case MappingField.memoryLimit:
+        if (isVarInt(wireType)) data.memoryLimit = decodeNumber(buffer, start, end)
         break
-      case 4:
-        data.fileOffset = decodeNumber(buffer, start, end)
+      case MappingField.fileOffset:
+        if (isVarInt(wireType)) data.fileOffset = decodeNumber(buffer, start, end)
         break
-      case 5:
-        data.filename = decodeNumber(buffer, start, end)
+      case MappingField.filename:
+        if (isVarInt(wireType)) data.filename = decodeNumber(buffer, start, end)
         break
-      case 6:
-        data.buildId = decodeNumber(buffer, start, end)
+      case MappingField.buildId:
+        if (isVarInt(wireType)) data.buildId = decodeNumber(buffer, start, end)
         break
-      case 7:
-        data.hasFunctions = !!decodeNumber(buffer, start, end)
+      case MappingField.hasFunctions:
+        if (isVarInt(wireType)) data.hasFunctions = !!decodeNumber(buffer, start, end)
         break
-      case 8:
-        data.hasFilenames = !!decodeNumber(buffer, start, end)
+      case MappingField.hasFilenames:
+        if (isVarInt(wireType)) data.hasFilenames = !!decodeNumber(buffer, start, end)
         break
-      case 9:
-        data.hasLineNumbers = !!decodeNumber(buffer, start, end)
+      case MappingField.hasLineNumbers:
+        if (isVarInt(wireType)) data.hasLineNumbers = !!decodeNumber(buffer, start, end)
         break
-      case 10:
-        data.hasInlineFrames = !!decodeNumber(buffer, start, end)
+      case MappingField.hasInlineFrames:
+        if (isVarInt(wireType)) data.hasInlineFrames = !!decodeNumber(buffer, start, end)
         break
     }
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Mapping {
-    return new this(decode(buffer, this.decodeValue, start, end) as MappingInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -726,7 +405,7 @@ export type LineInput = {
   column?: Numeric
 }
 
-export class Line {
+export class Line extends Message {
   functionId: Numeric
   line: Numeric
   column: Numeric
@@ -736,59 +415,43 @@ export class Line {
   }
 
   constructor(data: LineInput) {
+    super()
     this.functionId = data.functionId || 0
     this.line = data.line || 0
     this.column = data.column || 0
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureNumberField(this.functionId)
-    total += measureNumberField(this.line)
-    total += measureNumberField(this.column)
+    total += measureNumberField(LineField.functionId, this.functionId)
+    total += measureNumberField(LineField.line, this.line)
+    total += measureNumberField(LineField.column, this.column)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.functionId) {
-      buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.functionId)
-    }
-
-    if (this.line) {
-      buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.line)
-    }
-
-    if (this.column) {
-      buffer[offset++] = 24 // (3 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.column)
-    }
-
+    offset = encodeNumberField(buffer, offset, LineField.functionId, this.functionId)
+    offset = encodeNumberField(buffer, offset, LineField.line, this.line)
+    offset = encodeNumberField(buffer, offset, LineField.column, this.column)
     return offset
   }
 
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
-  }
-
-  static decodeValue(data: LineInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: LineInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
-      case 1:
-        data.functionId = decodeNumber(buffer, start, end)
+      case LineField.functionId:
+        if (isVarInt(wireType)) data.functionId = decodeNumber(buffer, start, end)
         break
-      case 2:
-        data.line = decodeNumber(buffer, start, end)
+      case LineField.line:
+        if (isVarInt(wireType)) data.line = decodeNumber(buffer, start, end)
         break
-      case 3:
-        data.column = decodeNumber(buffer, start, end)
+      case LineField.column:
+        if (isVarInt(wireType)) data.column = decodeNumber(buffer, start, end)
         break
     }
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Line {
-    return new this(decode(buffer, this.decodeValue, start, end) as LineInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -800,7 +463,7 @@ export type LocationInput = {
   isFolded?: boolean
 }
 
-export class Location {
+export class Location extends Message {
   id: Numeric
   mappingId: Numeric
   address: Numeric
@@ -812,6 +475,7 @@ export class Location {
   }
 
   constructor(data: LocationInput) {
+    super()
     this.id = data.id || 0
     this.mappingId = data.mappingId || 0
     this.address = data.address || 0
@@ -819,69 +483,47 @@ export class Location {
     this.isFolded = !!data.isFolded
   }
 
-  get length() {
+  _measure(context: EncodeContext) {
     let total = 0
-    total += measureNumberField(this.id)
-    total += measureNumberField(this.mappingId)
-    total += measureNumberField(this.address)
-    total += measureLengthDelimArrayField(this.line)
-    total += measureNumberField(this.isFolded ? 1 : 0)
+    total += measureNumberField(LocationField.id, this.id)
+    total += measureNumberField(LocationField.mappingId, this.mappingId)
+    total += measureNumberField(LocationField.address, this.address)
+    total += measureMessageArrayField(LocationField.line, this.line, context)
+    total += measureBoolField(LocationField.isFolded, this.isFolded)
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.id) {
-      buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.id)
-    }
-    if (this.mappingId) {
-      buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.mappingId)
-    }
-    if (this.address) {
-      buffer[offset++] = 24 // (3 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.address)
-    }
-    for (const line of this.line) {
-      buffer[offset++] = 34 // (4 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, line.length)
-      offset = line._encodeToBuffer(buffer, offset)
-    }
-    if (this.isFolded) {
-      buffer[offset++] = 40 // (5 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, 1)
-    }
-
+  _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    offset = encodeNumberField(buffer, offset, LocationField.id, this.id)
+    offset = encodeNumberField(buffer, offset, LocationField.mappingId, this.mappingId)
+    offset = encodeNumberField(buffer, offset, LocationField.address, this.address)
+    offset = encodeMessageArrayField(buffer, offset, LocationField.line, this.line, context)
+    offset = encodeBoolField(buffer, offset, LocationField.isFolded, this.isFolded)
     return offset
   }
 
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
-  }
-
-  static decodeValue(data: LocationInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: LocationInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
-      case 1:
-        data.id = decodeNumber(buffer, start, end)
+      case LocationField.id:
+        if (isVarInt(wireType)) data.id = decodeNumber(buffer, start, end)
         break
-      case 2:
-        data.mappingId = decodeNumber(buffer, start, end)
+      case LocationField.mappingId:
+        if (isVarInt(wireType)) data.mappingId = decodeNumber(buffer, start, end)
         break
-      case 3:
-        data.address = decodeNumber(buffer, start, end)
+      case LocationField.address:
+        if (isVarInt(wireType)) data.address = decodeNumber(buffer, start, end)
         break
-      case 4:
-        data.line = push(Line.decode(buffer, start, end), data.line)
+      case LocationField.line:
+        if (isLengthDelim(wireType)) data.line = push(Line.decode(buffer, start, end), data.line)
         break
-      case 5:
-        data.isFolded = !!decodeNumber(buffer, start, end)
+      case LocationField.isFolded:
+        if (isVarInt(wireType)) data.isFolded = !!decodeNumber(buffer, start, end)
         break
     }
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Location {
-    return new this(decode(buffer, this.decodeValue, start, end) as LocationInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -893,7 +535,7 @@ export type FunctionInput = {
   startLine?: Numeric
 }
 
-export class Function {
+export class Function extends Message {
   id: Numeric
   name: Numeric
   systemName: Numeric
@@ -905,6 +547,7 @@ export class Function {
   }
 
   constructor(data: FunctionInput) {
+    super()
     this.id = data.id || 0
     this.name = data.name || 0
     this.systemName = data.systemName || 0
@@ -912,68 +555,47 @@ export class Function {
     this.startLine = data.startLine || 0
   }
 
-  get length() {
+  _measure() {
     let total = 0
-    total += measureNumberField(this.id)
-    total += measureNumberField(this.name)
-    total += measureNumberField(this.systemName)
-    total += measureNumberField(this.filename)
-    total += measureNumberField(this.startLine)
+    total += measureNumberField(FunctionField.id, this.id)
+    total += measureNumberField(FunctionField.name, this.name)
+    total += measureNumberField(FunctionField.systemName, this.systemName)
+    total += measureNumberField(FunctionField.filename, this.filename)
+    total += measureNumberField(FunctionField.startLine, this.startLine)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.id) {
-      buffer[offset++] = 8 // (1 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.id)
-    }
-    if (this.name) {
-      buffer[offset++] = 16 // (2 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.name)
-    }
-    if (this.systemName) {
-      buffer[offset++] = 24 // (3 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.systemName)
-    }
-    if (this.filename) {
-      buffer[offset++] = 32 // (4 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.filename)
-    }
-    if (this.startLine) {
-      buffer[offset++] = 40 // (5 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.startLine)
-    }
-
+    offset = encodeNumberField(buffer, offset, FunctionField.id, this.id)
+    offset = encodeNumberField(buffer, offset, FunctionField.name, this.name)
+    offset = encodeNumberField(buffer, offset, FunctionField.systemName, this.systemName)
+    offset = encodeNumberField(buffer, offset, FunctionField.filename, this.filename)
+    offset = encodeNumberField(buffer, offset, FunctionField.startLine, this.startLine)
     return offset
   }
 
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
-    return buffer
-  }
-
-  static decodeValue(data: FunctionInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: FunctionInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
-      case 1:
-        data.id = decodeNumber(buffer, start, end)
+      case FunctionField.id:
+        if (isVarInt(wireType)) data.id = decodeNumber(buffer, start, end)
         break
-      case 2:
-        data.name = decodeNumber(buffer, start, end)
+      case FunctionField.name:
+        if (isVarInt(wireType)) data.name = decodeNumber(buffer, start, end)
         break
-      case 3:
-        data.systemName = decodeNumber(buffer, start, end)
+      case FunctionField.systemName:
+        if (isVarInt(wireType)) data.systemName = decodeNumber(buffer, start, end)
         break
-      case 4:
-        data.filename = decodeNumber(buffer, start, end)
+      case FunctionField.filename:
+        if (isVarInt(wireType)) data.filename = decodeNumber(buffer, start, end)
         break
-      case 5:
-        data.startLine = decodeNumber(buffer, start, end)
+      case FunctionField.startLine:
+        if (isVarInt(wireType)) data.startLine = decodeNumber(buffer, start, end)
         break
     }
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Function {
-    return new this(decode(buffer, this.decodeValue, start, end) as FunctionInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
 
@@ -995,7 +617,7 @@ export type ProfileInput = {
   docUrl?: Numeric
 }
 
-export class Profile {
+export class Profile extends Message {
   sampleType: Array<ValueType>
   sample: Array<Sample>
   mapping: Array<Mapping>
@@ -1013,6 +635,7 @@ export class Profile {
   docUrl: Numeric
 
   constructor(data: ProfileInput = {}) {
+    super()
     this.sampleType = (data.sampleType || []).map(ValueType.create)
     this.sample = (data.sample || []).map(Sample.create)
     this.mapping = (data.mapping || []).map(Mapping.create)
@@ -1030,227 +653,167 @@ export class Profile {
     this.docUrl = data.docUrl || 0
   }
 
-  get length() {
+  _measure(context: EncodeContext) {
     let total = 0
-    total += measureLengthDelimArrayField(this.sampleType)
-    total += measureLengthDelimArrayField(this.sample)
-    total += measureLengthDelimArrayField(this.mapping)
-    total += measureLengthDelimArrayField(this.location)
-    total += measureLengthDelimArrayField(this.function)
-    total += this.stringTable.encodedLength
-    total += measureNumberField(this.dropFrames)
-    total += measureNumberField(this.keepFrames)
-    total += measureNumberField(this.timeNanos)
-    total += measureNumberField(this.durationNanos)
-    total += measureLengthDelimField(this.periodType)
-    total += measureNumberField(this.period)
-    total += measureNumberArrayField(this.comment)
-    total += measureNumberField(this.defaultSampleType)
-    total += measureNumberField(this.docUrl)
+    total += measureMessageArrayField(ProfileField.sampleType, this.sampleType, context)
+    total += measureMessageArrayField(ProfileField.sample, this.sample, context)
+    total += measureMessageArrayField(ProfileField.mapping, this.mapping, context)
+    total += measureMessageArrayField(ProfileField.location, this.location, context)
+    total += measureMessageArrayField(ProfileField.function, this.function, context)
+    total += this.stringTable._measure(ProfileField.stringTable)
+    total += measureNumberField(ProfileField.dropFrames, this.dropFrames)
+    total += measureNumberField(ProfileField.keepFrames, this.keepFrames)
+    total += measureNumberField(ProfileField.timeNanos, this.timeNanos)
+    total += measureNumberField(ProfileField.durationNanos, this.durationNanos)
+    total += measureMessageField(ProfileField.periodType, this.periodType, context)
+    total += measureNumberField(ProfileField.period, this.period)
+    total += measurePackedNumbersField(ProfileField.comment, this.comment)
+    total += measureNumberField(ProfileField.defaultSampleType, this.defaultSampleType)
+    total += measureNumberField(ProfileField.docUrl, this.docUrl)
     return total
   }
 
-  _encodeSampleTypesToBuffer(buffer: Uint8Array, offset = 0): number {
-    for (const sampleType of this.sampleType) {
-      buffer[offset++] = 10 // (1 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, sampleType.length)
-      offset = sampleType._encodeToBuffer(buffer, offset)
-    }
+  _encodeSampleTypesToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    return encodeMessageArrayField(buffer, offset, ProfileField.sampleType, this.sampleType, context)
+  }
+
+  _encodeSamplesToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    return encodeMessageArrayField(buffer, offset, ProfileField.sample, this.sample, context)
+  }
+
+  _encodeMappingsToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    return encodeMessageArrayField(buffer, offset, ProfileField.mapping, this.mapping, context)
+  }
+
+  _encodeLocationsToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    return encodeMessageArrayField(buffer, offset, ProfileField.location, this.location, context)
+  }
+
+  _encodeFunctionsToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    return encodeMessageArrayField(buffer, offset, ProfileField.function, this.function, context)
+  }
+
+  _encodeBasicValuesToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    offset = encodeNumberField(buffer, offset, ProfileField.dropFrames, this.dropFrames)
+    offset = encodeNumberField(buffer, offset, ProfileField.keepFrames, this.keepFrames)
+    offset = encodeNumberField(buffer, offset, ProfileField.timeNanos, this.timeNanos)
+    offset = encodeNumberField(buffer, offset, ProfileField.durationNanos, this.durationNanos)
+    offset = encodeMessageField(buffer, offset, ProfileField.periodType, this.periodType, context)
+    offset = encodeNumberField(buffer, offset, ProfileField.period, this.period)
+    offset = encodePackedNumbersField(buffer, offset, ProfileField.comment, this.comment)
+    offset = encodeNumberField(buffer, offset, ProfileField.defaultSampleType, this.defaultSampleType)
+    offset = encodeNumberField(buffer, offset, ProfileField.docUrl, this.docUrl)
     return offset
   }
 
-  _encodeSamplesToBuffer(buffer: Uint8Array, offset = 0): number {
-    for (const sample of this.sample) {
-      buffer[offset++] = 18 // (2 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, sample.length)
-      offset = sample._encodeToBuffer(buffer, offset)
-    }
+  _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    offset = this._encodeSampleTypesToBuffer(buffer, offset, context)
+    offset = this._encodeSamplesToBuffer(buffer, offset, context)
+    offset = this._encodeMappingsToBuffer(buffer, offset, context)
+    offset = this._encodeLocationsToBuffer(buffer, offset, context)
+    offset = this._encodeFunctionsToBuffer(buffer, offset, context)
+    offset = this.stringTable._encodeToBuffer(buffer, offset, ProfileField.stringTable)
+    offset = this._encodeBasicValuesToBuffer(buffer, offset, context)
     return offset
   }
 
-  _encodeMappingsToBuffer(buffer: Uint8Array, offset = 0): number {
-    for (const mapping of this.mapping) {
-      buffer[offset++] = 26 // (3 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, mapping.length)
-      offset = mapping._encodeToBuffer(buffer, offset)
-    }
-    return offset
-  }
-
-  _encodeLocationsToBuffer(buffer: Uint8Array, offset = 0): number {
-    for (const location of this.location) {
-      buffer[offset++] = 34 // (4 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, location.length)
-      offset = location._encodeToBuffer(buffer, offset)
-    }
-    return offset
-  }
-
-  _encodeFunctionsToBuffer(buffer: Uint8Array, offset = 0): number {
-    for (const fun of this.function) {
-      buffer[offset++] = 42 // (5 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, fun.length)
-      offset = fun._encodeToBuffer(buffer, offset)
-    }
-    return offset
-  }
-
-  _encodeBasicValuesToBuffer(buffer: Uint8Array, offset = 0): number {
-    if (this.dropFrames) {
-      buffer[offset++] = 56 // (7 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.dropFrames)
-    }
-
-    if (this.keepFrames) {
-      buffer[offset++] = 64 // (8 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.keepFrames)
-    }
-
-    if (this.timeNanos) {
-      buffer[offset++] = 72 // (9 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.timeNanos)
-    }
-
-    if (this.durationNanos) {
-      buffer[offset++] = 80 // (10 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.durationNanos)
-    }
-
-    if (typeof this.periodType !== 'undefined') {
-      buffer[offset++] = 90 // (11 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, this.periodType.length)
-      offset = this.periodType._encodeToBuffer(buffer, offset)
-    }
-
-    if (this.period) {
-      buffer[offset++] = 96 // (12 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.period)
-    }
-
-    if (this.comment.length) {
-      buffer[offset++] = 106 // (13 << 3) + kTypeLengthDelim
-      offset = encodeNumber(buffer, offset, measureArray(this.comment))
-      for (const comment of this.comment) {
-        offset = encodeNumber(buffer, offset, comment)
-      }
-    }
-
-    if (this.defaultSampleType) {
-      buffer[offset++] = 112 // (14 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.defaultSampleType)
-    }
-
-    if (this.docUrl) {
-      buffer[offset++] = 120 // (15 << 3) + kTypeVarInt
-      offset = encodeNumber(buffer, offset, this.docUrl)
-    }
-
-    return offset
-  }
-
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    offset = this._encodeSampleTypesToBuffer(buffer, offset)
-    offset = this._encodeSamplesToBuffer(buffer, offset)
-    offset = this._encodeMappingsToBuffer(buffer, offset)
-    offset = this._encodeLocationsToBuffer(buffer, offset)
-    offset = this._encodeFunctionsToBuffer(buffer, offset)
-    offset = this.stringTable._encodeToBuffer(buffer, offset)
-    offset = this._encodeBasicValuesToBuffer(buffer, offset)
-    return offset
-  }
-
-  async _encodeToBufferAsync(buffer: Uint8Array, offset = 0): Promise<number> {
-    offset = this._encodeSampleTypesToBuffer(buffer, offset)
+  /** Like _encodeToBuffer(), but yields between phases. */
+  async _encodeToBufferAsync(buffer: Uint8Array, offset: number, context: EncodeContext): Promise<number> {
+    offset = this._encodeSampleTypesToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = this._encodeSamplesToBuffer(buffer, offset)
+    offset = this._encodeSamplesToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = this._encodeMappingsToBuffer(buffer, offset)
+    offset = this._encodeMappingsToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = this._encodeLocationsToBuffer(buffer, offset)
+    offset = this._encodeLocationsToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = this._encodeFunctionsToBuffer(buffer, offset)
+    offset = this._encodeFunctionsToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = this.stringTable._encodeToBuffer(buffer, offset)
+    offset = this.stringTable._encodeToBuffer(buffer, offset, ProfileField.stringTable)
     await yieldToEventLoop()
 
-    offset = this._encodeBasicValuesToBuffer(buffer, offset)
+    offset = this._encodeBasicValuesToBuffer(buffer, offset, context)
     return offset
   }
 
-  encode(buffer = new Uint8Array(this.length)): Uint8Array {
-    this._encodeToBuffer(buffer, 0)
+  /** Like encode(), but yields between phases. Do not mutate until it settles. */
+  async encodeAsync(buffer?: Uint8Array): Promise<Uint8Array> {
+    const context = newEncodeContext()
+    const length = this._measure(context)
+    buffer = prepareBuffer(buffer, length)
+    verifyEncodedLength(await this._encodeToBufferAsync(buffer, 0, context), length)
     return buffer
   }
 
-  async encodeAsync(buffer = new Uint8Array(this.length)): Promise<Uint8Array> {
-    await this._encodeToBufferAsync(buffer, 0)
-    return buffer
-  }
-
-  static decodeValue(data: ProfileInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length) {
+  static decodeValue(data: ProfileInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
-      case 1:
-        data.sampleType = push(ValueType.decode(buffer, start, end), data.sampleType)
+      case ProfileField.sampleType:
+        if (isLengthDelim(wireType)) data.sampleType = push(ValueType.decode(buffer, start, end), data.sampleType)
         break
-      case 2:
-        data.sample = push(Sample.decode(buffer, start, end), data.sample)
+      case ProfileField.sample:
+        if (isLengthDelim(wireType)) data.sample = push(Sample.decode(buffer, start, end), data.sample)
         break
-      case 3:
-        data.mapping = push(Mapping.decode(buffer, start, end), data.mapping)
+      case ProfileField.mapping:
+        if (isLengthDelim(wireType)) data.mapping = push(Mapping.decode(buffer, start, end), data.mapping)
         break
-      case 4:
-        data.location = push(Location.decode(buffer, start, end), data.location)
+      case ProfileField.location:
+        if (isLengthDelim(wireType)) data.location = push(Location.decode(buffer, start, end), data.location)
         break
-      case 5:
-        data.function = push(Function.decode(buffer, start, end), data.function)
+      case ProfileField.function:
+        if (isLengthDelim(wireType)) data.function = push(Function.decode(buffer, start, end), data.function)
         break
-      case 6: {
+      case ProfileField.stringTable: {
+        if (!isLengthDelim(wireType)) break
         if (data.stringTable === undefined) {
           data.stringTable = new StringTable(emptyTableToken)
         }
         data.stringTable._decodeString(buffer.subarray(start, end))
         break
       }
-      case 7:
-        data.dropFrames = decodeNumber(buffer, start, end)
+      case ProfileField.dropFrames:
+        if (isVarInt(wireType)) data.dropFrames = decodeNumber(buffer, start, end)
         break
-      case 8:
-        data.keepFrames = decodeNumber(buffer, start, end)
+      case ProfileField.keepFrames:
+        if (isVarInt(wireType)) data.keepFrames = decodeNumber(buffer, start, end)
         break
-      case 9:
-        data.timeNanos = decodeNumber(buffer, start, end)
+      case ProfileField.timeNanos:
+        if (isVarInt(wireType)) data.timeNanos = decodeNumber(buffer, start, end)
         break
-      case 10:
-        data.durationNanos = decodeNumber(buffer, start, end)
+      case ProfileField.durationNanos:
+        if (isVarInt(wireType)) data.durationNanos = decodeNumber(buffer, start, end)
         break
-      case 11:
+      case ProfileField.periodType:
         // Occurrences of a singular message field are merged:
         // https://protobuf.dev/programming-guides/encoding/#last-one-wins
-        data.periodType = new ValueType(
-          decode(buffer, ValueType.decodeValue, start, end, { ...data.periodType }) as ValueTypeInput
-        )
+        if (isLengthDelim(wireType)) {
+          data.periodType = new ValueType(decodeFields(buffer, ValueType.decodeValue, start, end, { ...data.periodType }))
+        }
         break
-      case 12:
-        data.period = decodeNumber(buffer, start, end)
+      case ProfileField.period:
+        if (isVarInt(wireType)) data.period = decodeNumber(buffer, start, end)
         break
-      case 13:
-        data.comment = pushAll(decodeNumbers(buffer, start, end), data.comment)
+      case ProfileField.comment:
+        if (isPackedOrVarInt(wireType)) data.comment = pushAll(decodeNumbers(buffer, start, end), data.comment)
         break
-      case 14:
-        data.defaultSampleType = decodeNumber(buffer, start, end)
+      case ProfileField.defaultSampleType:
+        if (isVarInt(wireType)) data.defaultSampleType = decodeNumber(buffer, start, end)
         break
-      case 15:
-        data.docUrl = decodeNumber(buffer, start, end)
+      case ProfileField.docUrl:
+        if (isVarInt(wireType)) data.docUrl = decodeNumber(buffer, start, end)
         break
     }
   }
 
+  /**
+   * Decodes a profile. Like other protobuf implementations, it skips unknown
+   * fields and fields whose wire type differs from the declared one.
+   */
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Profile {
-    return new this(decode(buffer, this.decodeValue, start, end) as ProfileInput)
+    return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
 }
