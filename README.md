@@ -104,3 +104,63 @@ const copied = Profile.decode(profile.encode())
 // Should match the structure of the original profile object
 console.log(copied)
 ```
+
+## OpenTelemetry profiles
+
+The `pprof-format/otel` entry point encodes and decodes the OpenTelemetry
+profiles signal, as defined by
+[opentelemetry-proto](https://github.com/open-telemetry/opentelemetry-proto)
+v1.11.1. The signal is still in development, so its messages may change.
+
+Its classes mirror the proto messages, with camelCase field names. Profiles
+refer to functions, locations, stacks, strings and other entries by index into
+a dictionary shared by all profiles of a request. Each dictionary table starts
+with the zero value of its type at index 0, which means "not set"; tables that
+aren't given default to just that entry.
+
+```js
+import {
+  ExportProfilesServiceRequest,
+  StringTable
+} from 'pprof-format/otel'
+
+const strings = new StringTable()
+const cpu = {
+  typeStrindex: strings.dedup('cpu'),
+  unitStrindex: strings.dedup('nanoseconds')
+}
+
+const request = new ExportProfilesServiceRequest({
+  resourceProfiles: [{
+    resource: {
+      attributes: [{ key: 'service.name', value: { stringValue: 'my-service' } }]
+    },
+    scopeProfiles: [{
+      scope: { name: 'my-profiler', version: '1.0.0' },
+      profiles: [{
+        sampleType: cpu,
+        periodType: cpu,
+        period: 10_000_000,
+        timeUnixNano: BigInt(Date.now()) * 1_000_000n,
+        durationNano: 60_000_000_000,
+        samples: [{ stackIndex: 1, values: [10_000_000] }]
+      }]
+    }]
+  }],
+  dictionary: {
+    functionTable: [{}, {
+      nameStrindex: strings.dedup('main'),
+      filenameStrindex: strings.dedup('main.js')
+    }],
+    locationTable: [{}, { lines: [{ functionIndex: 1, line: 12, column: 3 }] }],
+    stackTable: [{}, { locationIndices: [1] }],
+    stringTable: strings
+  }
+})
+
+// Encode to Uint8Array, e.g. as the body of an OTLP export request
+const body = request.encode()
+
+// Decode from Uint8Array
+const copied = ExportProfilesServiceRequest.decode(body)
+```
