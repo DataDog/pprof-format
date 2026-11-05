@@ -5,7 +5,7 @@ var $protobuf = require("protobufjs/minimal");
 
 // Common aliases
 var $Reader = $protobuf.Reader, $Writer = $protobuf.Writer, $util = $protobuf.util;
-var $Object = $util.global.Object, $undefined = $util.global.undefined, $Error = $util.global.Error, $Array = $util.global.Array, $TypeError = $util.global.TypeError, $Number = $util.global.Number, $parseInt = $util.global.parseInt, $String = $util.global.String, $BigInt = $util.global.BigInt, $Boolean = $util.global.Boolean, $isFinite = $util.global.isFinite;
+var $Object = $util.global.Object, $undefined = $util.global.undefined, $Error = $util.global.Error, $RangeError = $util.global.RangeError, $Array = $util.global.Array, $TypeError = $util.global.TypeError, $Number = $util.global.Number, $parseInt = $util.global.parseInt, $String = $util.global.String, $BigInt = $util.global.BigInt, $Boolean = $util.global.Boolean, $isFinite = $util.global.isFinite;
 
 // Exported root namespace
 var $root = $protobuf.roots["default"] || ($protobuf.roots["default"] = {});
@@ -264,7 +264,17 @@ $root.opentelemetry = (function() {
                                 _depth = 0;
                             if (_depth > $Reader.recursionLimit)
                                 throw $Error("max depth exceeded");
-                            var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.collector.profiles.v1development.ExportProfilesServiceRequest(), value;
+                            var end, message, value;
+                            if (length === $undefined)
+                                end = reader.len;
+                            else {
+                                end = reader.pos + length;
+                                if (end > reader.len)
+                                    throw $RangeError("index out of range");
+                                length = reader.len;
+                                reader.len = end;
+                            }
+                            message = _target || new $root.opentelemetry.proto.collector.profiles.v1development.ExportProfilesServiceRequest();
                             while (reader.pos < end) {
                                 var start = reader.pos;
                                 var tag = reader.tag();
@@ -279,13 +289,13 @@ $root.opentelemetry = (function() {
                                             break;
                                         if (!(message.resourceProfiles && message.resourceProfiles.length))
                                             message.resourceProfiles = [];
-                                        message.resourceProfiles.push($root.opentelemetry.proto.profiles.v1development.ResourceProfiles.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                        message.resourceProfiles.push($root.opentelemetry.proto.profiles.v1development.ResourceProfiles.decode(reader, reader.size(), $undefined, _depth + 1));
                                         continue;
                                     }
                                 case 2: {
                                         if (wireType !== 2)
                                             break;
-                                        message.dictionary = $root.opentelemetry.proto.profiles.v1development.ProfilesDictionary.decode(reader, reader.uint32(), $undefined, _depth + 1, message.dictionary);
+                                        message.dictionary = $root.opentelemetry.proto.profiles.v1development.ProfilesDictionary.decode(reader, reader.size(), $undefined, _depth + 1, message.dictionary);
                                         continue;
                                     }
                                 }
@@ -294,6 +304,11 @@ $root.opentelemetry = (function() {
                                     $util.makeProp(message, "$unknowns", false);
                                     (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                                 }
+                            }
+                            if (length !== $undefined) {
+                                if (reader.pos !== end)
+                                    throw $RangeError("index out of range");
+                                reader.len = length;
                             }
                             if (_end !== $undefined)
                                 throw $Error("missing end group");
@@ -313,7 +328,7 @@ $root.opentelemetry = (function() {
                         ExportProfilesServiceRequest.decodeDelimited = function(reader) {
                             if (!(reader instanceof $Reader))
                                 reader = new $Reader(reader);
-                            return this.decode(reader, reader.uint32());
+                            return this.decode(reader, reader.size());
                         };
 
                         /**
@@ -559,7 +574,17 @@ $root.opentelemetry = (function() {
                                 _depth = 0;
                             if (_depth > $Reader.recursionLimit)
                                 throw $Error("max depth exceeded");
-                            var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.collector.profiles.v1development.ExportProfilesServiceResponse(), value;
+                            var end, message, value;
+                            if (length === $undefined)
+                                end = reader.len;
+                            else {
+                                end = reader.pos + length;
+                                if (end > reader.len)
+                                    throw $RangeError("index out of range");
+                                length = reader.len;
+                                reader.len = end;
+                            }
+                            message = _target || new $root.opentelemetry.proto.collector.profiles.v1development.ExportProfilesServiceResponse();
                             while (reader.pos < end) {
                                 var start = reader.pos;
                                 var tag = reader.tag();
@@ -572,7 +597,7 @@ $root.opentelemetry = (function() {
                                 case 1: {
                                         if (wireType !== 2)
                                             break;
-                                        message.partialSuccess = $root.opentelemetry.proto.collector.profiles.v1development.ExportProfilesPartialSuccess.decode(reader, reader.uint32(), $undefined, _depth + 1, message.partialSuccess);
+                                        message.partialSuccess = $root.opentelemetry.proto.collector.profiles.v1development.ExportProfilesPartialSuccess.decode(reader, reader.size(), $undefined, _depth + 1, message.partialSuccess);
                                         continue;
                                     }
                                 }
@@ -581,6 +606,11 @@ $root.opentelemetry = (function() {
                                     $util.makeProp(message, "$unknowns", false);
                                     (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                                 }
+                            }
+                            if (length !== $undefined) {
+                                if (reader.pos !== end)
+                                    throw $RangeError("index out of range");
+                                reader.len = length;
                             }
                             if (_end !== $undefined)
                                 throw $Error("missing end group");
@@ -600,7 +630,7 @@ $root.opentelemetry = (function() {
                         ExportProfilesServiceResponse.decodeDelimited = function(reader) {
                             if (!(reader instanceof $Reader))
                                 reader = new $Reader(reader);
-                            return this.decode(reader, reader.uint32());
+                            return this.decode(reader, reader.size());
                         };
 
                         /**
@@ -831,7 +861,17 @@ $root.opentelemetry = (function() {
                                 _depth = 0;
                             if (_depth > $Reader.recursionLimit)
                                 throw $Error("max depth exceeded");
-                            var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.collector.profiles.v1development.ExportProfilesPartialSuccess(), value;
+                            var end, message, value;
+                            if (length === $undefined)
+                                end = reader.len;
+                            else {
+                                end = reader.pos + length;
+                                if (end > reader.len)
+                                    throw $RangeError("index out of range");
+                                length = reader.len;
+                                reader.len = end;
+                            }
+                            message = _target || new $root.opentelemetry.proto.collector.profiles.v1development.ExportProfilesPartialSuccess();
                             while (reader.pos < end) {
                                 var start = reader.pos;
                                 var tag = reader.tag();
@@ -866,6 +906,11 @@ $root.opentelemetry = (function() {
                                     (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                                 }
                             }
+                            if (length !== $undefined) {
+                                if (reader.pos !== end)
+                                    throw $RangeError("index out of range");
+                                reader.len = length;
+                            }
                             if (_end !== $undefined)
                                 throw $Error("missing end group");
                             return message;
@@ -884,7 +929,7 @@ $root.opentelemetry = (function() {
                         ExportProfilesPartialSuccess.decodeDelimited = function(reader) {
                             if (!(reader instanceof $Reader))
                                 reader = new $Reader(reader);
-                            return this.decode(reader, reader.uint32());
+                            return this.decode(reader, reader.size());
                         };
 
                         /**
@@ -1242,7 +1287,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.ProfilesDictionary();
+                        var end, message;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.ProfilesDictionary();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -1257,7 +1312,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.mappingTable && message.mappingTable.length))
                                         message.mappingTable = [];
-                                    message.mappingTable.push($root.opentelemetry.proto.profiles.v1development.Mapping.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.mappingTable.push($root.opentelemetry.proto.profiles.v1development.Mapping.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             case 2: {
@@ -1265,7 +1320,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.locationTable && message.locationTable.length))
                                         message.locationTable = [];
-                                    message.locationTable.push($root.opentelemetry.proto.profiles.v1development.Location.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.locationTable.push($root.opentelemetry.proto.profiles.v1development.Location.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             case 3: {
@@ -1273,7 +1328,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.functionTable && message.functionTable.length))
                                         message.functionTable = [];
-                                    message.functionTable.push($root.opentelemetry.proto.profiles.v1development.Function.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.functionTable.push($root.opentelemetry.proto.profiles.v1development.Function.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             case 4: {
@@ -1281,7 +1336,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.linkTable && message.linkTable.length))
                                         message.linkTable = [];
-                                    message.linkTable.push($root.opentelemetry.proto.profiles.v1development.Link.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.linkTable.push($root.opentelemetry.proto.profiles.v1development.Link.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             case 5: {
@@ -1297,7 +1352,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.attributeTable && message.attributeTable.length))
                                         message.attributeTable = [];
-                                    message.attributeTable.push($root.opentelemetry.proto.profiles.v1development.KeyValueAndUnit.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.attributeTable.push($root.opentelemetry.proto.profiles.v1development.KeyValueAndUnit.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             case 7: {
@@ -1305,7 +1360,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.stackTable && message.stackTable.length))
                                         message.stackTable = [];
-                                    message.stackTable.push($root.opentelemetry.proto.profiles.v1development.Stack.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.stackTable.push($root.opentelemetry.proto.profiles.v1development.Stack.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             }
@@ -1314,6 +1369,11 @@ $root.opentelemetry = (function() {
                                 $util.makeProp(message, "$unknowns", false);
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
+                        }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
                         }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
@@ -1333,7 +1393,7 @@ $root.opentelemetry = (function() {
                     ProfilesDictionary.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -1728,7 +1788,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.ProfilesData(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.ProfilesData();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -1743,13 +1813,13 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.resourceProfiles && message.resourceProfiles.length))
                                         message.resourceProfiles = [];
-                                    message.resourceProfiles.push($root.opentelemetry.proto.profiles.v1development.ResourceProfiles.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.resourceProfiles.push($root.opentelemetry.proto.profiles.v1development.ResourceProfiles.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             case 2: {
                                     if (wireType !== 2)
                                         break;
-                                    message.dictionary = $root.opentelemetry.proto.profiles.v1development.ProfilesDictionary.decode(reader, reader.uint32(), $undefined, _depth + 1, message.dictionary);
+                                    message.dictionary = $root.opentelemetry.proto.profiles.v1development.ProfilesDictionary.decode(reader, reader.size(), $undefined, _depth + 1, message.dictionary);
                                     continue;
                                 }
                             }
@@ -1758,6 +1828,11 @@ $root.opentelemetry = (function() {
                                 $util.makeProp(message, "$unknowns", false);
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
+                        }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
                         }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
@@ -1777,7 +1852,7 @@ $root.opentelemetry = (function() {
                     ProfilesData.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -2052,7 +2127,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.ResourceProfiles(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.ResourceProfiles();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -2065,7 +2150,7 @@ $root.opentelemetry = (function() {
                             case 1: {
                                     if (wireType !== 2)
                                         break;
-                                    message.resource = $root.opentelemetry.proto.resource.v1.Resource.decode(reader, reader.uint32(), $undefined, _depth + 1, message.resource);
+                                    message.resource = $root.opentelemetry.proto.resource.v1.Resource.decode(reader, reader.size(), $undefined, _depth + 1, message.resource);
                                     continue;
                                 }
                             case 2: {
@@ -2073,7 +2158,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.scopeProfiles && message.scopeProfiles.length))
                                         message.scopeProfiles = [];
-                                    message.scopeProfiles.push($root.opentelemetry.proto.profiles.v1development.ScopeProfiles.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.scopeProfiles.push($root.opentelemetry.proto.profiles.v1development.ScopeProfiles.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             case 3: {
@@ -2091,6 +2176,11 @@ $root.opentelemetry = (function() {
                                 $util.makeProp(message, "$unknowns", false);
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
+                        }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
                         }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
@@ -2110,7 +2200,7 @@ $root.opentelemetry = (function() {
                     ResourceProfiles.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -2395,7 +2485,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.ScopeProfiles(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.ScopeProfiles();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -2408,7 +2508,7 @@ $root.opentelemetry = (function() {
                             case 1: {
                                     if (wireType !== 2)
                                         break;
-                                    message.scope = $root.opentelemetry.proto.common.v1.InstrumentationScope.decode(reader, reader.uint32(), $undefined, _depth + 1, message.scope);
+                                    message.scope = $root.opentelemetry.proto.common.v1.InstrumentationScope.decode(reader, reader.size(), $undefined, _depth + 1, message.scope);
                                     continue;
                                 }
                             case 2: {
@@ -2416,7 +2516,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.profiles && message.profiles.length))
                                         message.profiles = [];
-                                    message.profiles.push($root.opentelemetry.proto.profiles.v1development.Profile.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.profiles.push($root.opentelemetry.proto.profiles.v1development.Profile.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             case 3: {
@@ -2434,6 +2534,11 @@ $root.opentelemetry = (function() {
                                 $util.makeProp(message, "$unknowns", false);
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
+                        }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
                         }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
@@ -2453,7 +2558,7 @@ $root.opentelemetry = (function() {
                     ScopeProfiles.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -2822,7 +2927,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.Profile(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.Profile();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -2835,7 +2950,7 @@ $root.opentelemetry = (function() {
                             case 1: {
                                     if (wireType !== 2)
                                         break;
-                                    message.sampleType = $root.opentelemetry.proto.profiles.v1development.ValueType.decode(reader, reader.uint32(), $undefined, _depth + 1, message.sampleType);
+                                    message.sampleType = $root.opentelemetry.proto.profiles.v1development.ValueType.decode(reader, reader.size(), $undefined, _depth + 1, message.sampleType);
                                     continue;
                                 }
                             case 2: {
@@ -2843,7 +2958,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.samples && message.samples.length))
                                         message.samples = [];
-                                    message.samples.push($root.opentelemetry.proto.profiles.v1development.Sample.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.samples.push($root.opentelemetry.proto.profiles.v1development.Sample.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             case 3: {
@@ -2867,7 +2982,7 @@ $root.opentelemetry = (function() {
                             case 5: {
                                     if (wireType !== 2)
                                         break;
-                                    message.periodType = $root.opentelemetry.proto.profiles.v1development.ValueType.decode(reader, reader.uint32(), $undefined, _depth + 1, message.periodType);
+                                    message.periodType = $root.opentelemetry.proto.profiles.v1development.ValueType.decode(reader, reader.size(), $undefined, _depth + 1, message.periodType);
                                     continue;
                                 }
                             case 6: {
@@ -2936,6 +3051,11 @@ $root.opentelemetry = (function() {
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
                         }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
+                        }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
                         return message;
@@ -2954,7 +3074,7 @@ $root.opentelemetry = (function() {
                     Profile.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -3375,7 +3495,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.Link(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.Link();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -3410,6 +3540,11 @@ $root.opentelemetry = (function() {
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
                         }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
+                        }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
                         return message;
@@ -3428,7 +3563,7 @@ $root.opentelemetry = (function() {
                     Link.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -3683,7 +3818,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.ValueType(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.ValueType();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -3718,6 +3863,11 @@ $root.opentelemetry = (function() {
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
                         }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
+                        }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
                         return message;
@@ -3736,7 +3886,7 @@ $root.opentelemetry = (function() {
                     ValueType.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -4009,7 +4159,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.Sample(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.Sample();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -4086,6 +4246,11 @@ $root.opentelemetry = (function() {
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
                         }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
+                        }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
                         return message;
@@ -4104,7 +4269,7 @@ $root.opentelemetry = (function() {
                     Sample.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -4461,7 +4626,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.Mapping(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.Mapping();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -4528,6 +4703,11 @@ $root.opentelemetry = (function() {
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
                         }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
+                        }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
                         return message;
@@ -4546,7 +4726,7 @@ $root.opentelemetry = (function() {
                     Mapping.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -4860,7 +5040,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.Stack();
+                        var end, message;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.Stack();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -4891,6 +5081,11 @@ $root.opentelemetry = (function() {
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
                         }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
+                        }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
                         return message;
@@ -4909,7 +5104,7 @@ $root.opentelemetry = (function() {
                     Stack.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -5172,7 +5367,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.Location(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.Location();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -5205,7 +5410,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.lines && message.lines.length))
                                         message.lines = [];
-                                    message.lines.push($root.opentelemetry.proto.profiles.v1development.Line.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.lines.push($root.opentelemetry.proto.profiles.v1development.Line.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             case 4: {
@@ -5229,6 +5434,11 @@ $root.opentelemetry = (function() {
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
                         }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
+                        }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
                         return message;
@@ -5247,7 +5457,7 @@ $root.opentelemetry = (function() {
                     Location.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -5558,7 +5768,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.Line(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.Line();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -5602,6 +5822,11 @@ $root.opentelemetry = (function() {
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
                         }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
+                        }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
                         return message;
@@ -5620,7 +5845,7 @@ $root.opentelemetry = (function() {
                     Line.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -5920,7 +6145,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.Function(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.Function();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -5973,6 +6208,11 @@ $root.opentelemetry = (function() {
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
                         }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
+                        }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
                         return message;
@@ -5991,7 +6231,7 @@ $root.opentelemetry = (function() {
                     Function.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -6278,7 +6518,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.profiles.v1development.KeyValueAndUnit(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.profiles.v1development.KeyValueAndUnit();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -6300,7 +6550,7 @@ $root.opentelemetry = (function() {
                             case 2: {
                                     if (wireType !== 2)
                                         break;
-                                    message.value = $root.opentelemetry.proto.common.v1.AnyValue.decode(reader, reader.uint32(), $undefined, _depth + 1, message.value);
+                                    message.value = $root.opentelemetry.proto.common.v1.AnyValue.decode(reader, reader.size(), $undefined, _depth + 1, message.value);
                                     continue;
                                 }
                             case 3: {
@@ -6318,6 +6568,11 @@ $root.opentelemetry = (function() {
                                 $util.makeProp(message, "$unknowns", false);
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
+                        }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
                         }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
@@ -6337,7 +6592,7 @@ $root.opentelemetry = (function() {
                     KeyValueAndUnit.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -6704,7 +6959,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.common.v1.AnyValue();
+                        var end, message;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.common.v1.AnyValue();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -6745,14 +7010,14 @@ $root.opentelemetry = (function() {
                             case 5: {
                                     if (wireType !== 2)
                                         break;
-                                    message.arrayValue = $root.opentelemetry.proto.common.v1.ArrayValue.decode(reader, reader.uint32(), $undefined, _depth + 1, message.arrayValue);
+                                    message.arrayValue = $root.opentelemetry.proto.common.v1.ArrayValue.decode(reader, reader.size(), $undefined, _depth + 1, message.arrayValue);
                                     message.value = "arrayValue";
                                     continue;
                                 }
                             case 6: {
                                     if (wireType !== 2)
                                         break;
-                                    message.kvlistValue = $root.opentelemetry.proto.common.v1.KeyValueList.decode(reader, reader.uint32(), $undefined, _depth + 1, message.kvlistValue);
+                                    message.kvlistValue = $root.opentelemetry.proto.common.v1.KeyValueList.decode(reader, reader.size(), $undefined, _depth + 1, message.kvlistValue);
                                     message.value = "kvlistValue";
                                     continue;
                                 }
@@ -6777,6 +7042,11 @@ $root.opentelemetry = (function() {
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
                         }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
+                        }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
                         return message;
@@ -6795,7 +7065,7 @@ $root.opentelemetry = (function() {
                     AnyValue.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -7144,7 +7414,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.common.v1.ArrayValue();
+                        var end, message;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.common.v1.ArrayValue();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -7159,7 +7439,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.values && message.values.length))
                                         message.values = [];
-                                    message.values.push($root.opentelemetry.proto.common.v1.AnyValue.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.values.push($root.opentelemetry.proto.common.v1.AnyValue.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             }
@@ -7168,6 +7448,11 @@ $root.opentelemetry = (function() {
                                 $util.makeProp(message, "$unknowns", false);
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
+                        }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
                         }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
@@ -7187,7 +7472,7 @@ $root.opentelemetry = (function() {
                     ArrayValue.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -7424,7 +7709,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.common.v1.KeyValueList();
+                        var end, message;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.common.v1.KeyValueList();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -7439,7 +7734,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.values && message.values.length))
                                         message.values = [];
-                                    message.values.push($root.opentelemetry.proto.common.v1.KeyValue.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.values.push($root.opentelemetry.proto.common.v1.KeyValue.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             }
@@ -7448,6 +7743,11 @@ $root.opentelemetry = (function() {
                                 $util.makeProp(message, "$unknowns", false);
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
+                        }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
                         }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
@@ -7467,7 +7767,7 @@ $root.opentelemetry = (function() {
                     KeyValueList.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -7726,7 +8026,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.common.v1.KeyValue(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.common.v1.KeyValue();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -7748,7 +8058,7 @@ $root.opentelemetry = (function() {
                             case 2: {
                                     if (wireType !== 2)
                                         break;
-                                    message.value = $root.opentelemetry.proto.common.v1.AnyValue.decode(reader, reader.uint32(), $undefined, _depth + 1, message.value);
+                                    message.value = $root.opentelemetry.proto.common.v1.AnyValue.decode(reader, reader.size(), $undefined, _depth + 1, message.value);
                                     continue;
                                 }
                             case 3: {
@@ -7766,6 +8076,11 @@ $root.opentelemetry = (function() {
                                 $util.makeProp(message, "$unknowns", false);
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
+                        }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
                         }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
@@ -7785,7 +8100,7 @@ $root.opentelemetry = (function() {
                     KeyValue.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -8065,7 +8380,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.common.v1.InstrumentationScope(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.common.v1.InstrumentationScope();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -8098,7 +8423,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.attributes && message.attributes.length))
                                         message.attributes = [];
-                                    message.attributes.push($root.opentelemetry.proto.common.v1.KeyValue.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.attributes.push($root.opentelemetry.proto.common.v1.KeyValue.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             case 4: {
@@ -8116,6 +8441,11 @@ $root.opentelemetry = (function() {
                                 $util.makeProp(message, "$unknowns", false);
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
+                        }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
                         }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
@@ -8135,7 +8465,7 @@ $root.opentelemetry = (function() {
                     InstrumentationScope.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -8433,7 +8763,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.common.v1.EntityRef(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.common.v1.EntityRef();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -8484,6 +8824,11 @@ $root.opentelemetry = (function() {
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
                         }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
+                        }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
                         return message;
@@ -8502,7 +8847,7 @@ $root.opentelemetry = (function() {
                     EntityRef.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
@@ -8825,7 +9170,17 @@ $root.opentelemetry = (function() {
                             _depth = 0;
                         if (_depth > $Reader.recursionLimit)
                             throw $Error("max depth exceeded");
-                        var end = length === $undefined ? reader.len : reader.pos + length, message = _target || new $root.opentelemetry.proto.resource.v1.Resource(), value;
+                        var end, message, value;
+                        if (length === $undefined)
+                            end = reader.len;
+                        else {
+                            end = reader.pos + length;
+                            if (end > reader.len)
+                                throw $RangeError("index out of range");
+                            length = reader.len;
+                            reader.len = end;
+                        }
+                        message = _target || new $root.opentelemetry.proto.resource.v1.Resource();
                         while (reader.pos < end) {
                             var start = reader.pos;
                             var tag = reader.tag();
@@ -8840,7 +9195,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.attributes && message.attributes.length))
                                         message.attributes = [];
-                                    message.attributes.push($root.opentelemetry.proto.common.v1.KeyValue.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.attributes.push($root.opentelemetry.proto.common.v1.KeyValue.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             case 2: {
@@ -8857,7 +9212,7 @@ $root.opentelemetry = (function() {
                                         break;
                                     if (!(message.entityRefs && message.entityRefs.length))
                                         message.entityRefs = [];
-                                    message.entityRefs.push($root.opentelemetry.proto.common.v1.EntityRef.decode(reader, reader.uint32(), $undefined, _depth + 1));
+                                    message.entityRefs.push($root.opentelemetry.proto.common.v1.EntityRef.decode(reader, reader.size(), $undefined, _depth + 1));
                                     continue;
                                 }
                             }
@@ -8866,6 +9221,11 @@ $root.opentelemetry = (function() {
                                 $util.makeProp(message, "$unknowns", false);
                                 (message.$unknowns || (message.$unknowns = [])).push(reader.raw(start, reader.pos));
                             }
+                        }
+                        if (length !== $undefined) {
+                            if (reader.pos !== end)
+                                throw $RangeError("index out of range");
+                            reader.len = length;
                         }
                         if (_end !== $undefined)
                             throw $Error("missing end group");
@@ -8885,7 +9245,7 @@ $root.opentelemetry = (function() {
                     Resource.decodeDelimited = function(reader) {
                         if (!(reader instanceof $Reader))
                             reader = new $Reader(reader);
-                        return this.decode(reader, reader.uint32());
+                        return this.decode(reader, reader.size());
                     };
 
                     /**
