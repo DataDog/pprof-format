@@ -391,6 +391,37 @@ test('decoding merges occurrences of singular message fields', async (t) => {
   })
 })
 
+test('decoding truncates varints to the width of 32-bit fields', () => {
+  const varint = (value: bigint) => {
+    let rest = BigInt.asUintN(64, value)
+    const bytes = []
+    do {
+      const low = Number(rest & 127n)
+      rest >>= 7n
+      bytes.push(rest ? low | 128 : low)
+    } while (rest)
+    return bytes
+  }
+  const values = [5n, 2n ** 32n + 5n, 2n ** 31n + 1n, -2n, 2n ** 63n + 7n]
+  const { Resource } = pb.resource.v1
+  const { Sample, Stack } = pb.profiles.v1development
+  for (const value of values) {
+    // stack_index and resource dropped_attributes_count are fields 1 and 2
+    const sample = Uint8Array.from([0x08, ...varint(value)])
+    assert.strictEqual(otel.Sample.decode(sample).stackIndex, Sample.decode(sample).stackIndex, `int32 ${value}`)
+    const resource = Uint8Array.from([0x10, ...varint(value)])
+    assert.strictEqual(
+      otel.Resource.decode(resource).droppedAttributesCount,
+      Resource.decode(resource).droppedAttributesCount,
+      `uint32 ${value}`
+    )
+  }
+  // Packed location_indices
+  const packed = values.flatMap(varint)
+  const stack = Uint8Array.from([0x0a, packed.length, ...packed])
+  assert.deepStrictEqual(otel.Stack.decode(stack).locationIndices, Stack.decode(stack).locationIndices)
+})
+
 test('decoding preserves a leading U+FEFF in strings', () => {
   const value = new AnyValue({ stringValue: '\uFEFFhello' })
   assert.strictEqual(AnyValue.decode(value.encode()).stringValue, '\uFEFFhello')

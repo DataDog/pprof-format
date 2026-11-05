@@ -72,12 +72,30 @@ export { StringTable, emptyTableToken }
 
 /* Scalar decoders. */
 
+/*
+ * A varint that doesn't fit an int32 or uint32 field is truncated, as if cast
+ * in C++: https://protobuf.dev/programming-guides/proto3/#updating
+ * Varints of up to 4 bytes decode as numbers, which always fit.
+ */
+
+function toInt32(value: Numeric): number {
+  return typeof value === 'bigint' ? Number(BigInt.asIntN(32, value)) : value | 0
+}
+
+function toUint32(value: Numeric): number {
+  return typeof value === 'bigint' ? Number(BigInt.asUintN(32, value)) : value >>> 0
+}
+
 function decodeInt32(buffer: Uint8Array, start: number, end: number): number {
-  return Number(toSigned(decodeNumber(buffer, start, end)))
+  return toInt32(decodeNumber(buffer, start, end))
 }
 
 function decodeInt32s(buffer: Uint8Array, start: number, end: number): number[] {
-  return decodeNumbers(buffer, start, end).map(value => Number(toSigned(value)))
+  return decodeNumbers(buffer, start, end).map(toInt32)
+}
+
+function decodeUint32(buffer: Uint8Array, start: number, end: number): number {
+  return toUint32(decodeNumber(buffer, start, end))
 }
 
 function decodeInt64(buffer: Uint8Array, start: number, end: number): Numeric {
@@ -449,7 +467,7 @@ export class InstrumentationScope extends Message {
         if (isLengthDelim(wireType)) data.attributes = push(KeyValue.decodeInput(buffer, start, end), data.attributes)
         break
       case InstrumentationScopeField.droppedAttributesCount:
-        if (isVarInt(wireType)) data.droppedAttributesCount = Number(decodeNumber(buffer, start, end))
+        if (isVarInt(wireType)) data.droppedAttributesCount = decodeUint32(buffer, start, end)
         break
     }
   }
@@ -591,7 +609,7 @@ export class Resource extends Message {
         if (isLengthDelim(wireType)) data.attributes = push(KeyValue.decodeInput(buffer, start, end), data.attributes)
         break
       case ResourceField.droppedAttributesCount:
-        if (isVarInt(wireType)) data.droppedAttributesCount = Number(decodeNumber(buffer, start, end))
+        if (isVarInt(wireType)) data.droppedAttributesCount = decodeUint32(buffer, start, end)
         break
       case ResourceField.entityRefs:
         if (isLengthDelim(wireType)) data.entityRefs = push(EntityRef.decodeInput(buffer, start, end), data.entityRefs)
@@ -1071,7 +1089,7 @@ export class Profile extends Message {
         if (isLengthDelim(wireType)) data.profileId = decodeBytes(buffer, start, end)
         break
       case ProfileField.droppedAttributesCount:
-        if (isVarInt(wireType)) data.droppedAttributesCount = Number(decodeNumber(buffer, start, end))
+        if (isVarInt(wireType)) data.droppedAttributesCount = decodeUint32(buffer, start, end)
         break
       case ProfileField.originalPayloadFormat:
         if (isLengthDelim(wireType)) data.originalPayloadFormat = decodeString(buffer, start, end)
