@@ -294,7 +294,10 @@ test('AnyValue', async (t) => {
   })
 
   await t.test('holds at most one value', () => {
-    assert.throws(() => new AnyValue({ intValue: 1, stringValue: 'x' }), TypeError)
+    assert.throws(() => new AnyValue({ intValue: 1, stringValue: 'x' }), {
+      name: 'TypeError',
+      message: 'AnyValue can hold only one value, got stringValue, intValue'
+    })
   })
 
   await t.test('decodes the last of several values', () => {

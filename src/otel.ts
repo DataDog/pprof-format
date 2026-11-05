@@ -173,8 +173,10 @@ export class AnyValue extends Message {
 
   constructor(data: AnyValueInput = {}) {
     super()
-    if (anyValueKeys.filter(key => data[key] !== undefined).length > 1) {
-      throw new TypeError('AnyValue can only hold one value')
+    // A oneof holds at most one value
+    const set = anyValueKeys.filter(key => data[key] !== undefined)
+    if (set.length > 1) {
+      throw new TypeError(`AnyValue can hold only one value, got ${set.join(', ')}`)
     }
     this.stringValue = data.stringValue
     this.boolValue = data.boolValue
