@@ -28,6 +28,18 @@ branch-diff v2.x main
 Review the output with the user. Skip:
 - Version bump commits (e.g. "Bump package version on to 3.0.0-pre")
 - Commits that would result in empty cherry-picks (already applied or superseded)
+- Commits from squash-merged releases (see below)
+
+**Squash-merged releases.** Some releases were squash-merged instead of rebased.
+Squashing strips the identity of every commit in them, so `branch-diff` keeps reporting
+those commits forever. Treat all of the following as already released:
+
+| Release | Proposal | PRs subsumed |
+|---|---|---|
+| 2.3.2 | #101 | 90, 91, 92, 94, 95, 96, 97, 98, 100 |
+
+If you squash-merge another release proposal, add a row here. To get the subsumed PRs,
+look at the `* ... (#NNN)` lines in the squash commit's message on `v2.x`.
 
 Confirm the list of commits with the user before proceeding.
 
