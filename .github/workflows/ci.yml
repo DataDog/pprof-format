@@ -26,3 +26,5 @@ jobs:
         node-version: 20
     - run: npm ci
     - run: npm run lint
+    - name: Check that the generated OTel test bindings match the protos
+      run: npm run proto:otel && git diff --exit-code testing/otel-proto

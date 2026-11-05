@@ -85,23 +85,24 @@ export class StringTable {
     return StringTable._encodeStringFromUtf8(toUtf8(string))
   }
 
-  dedup(string: string): number {
-    if (typeof string === 'number') return string
-    if (!this.#positions.has(string)) {
-      const pos = this.strings.push(string) - 1
-      this.#positions.set(string, pos)
+  dedup(value: string): number {
+    if (typeof value === 'number') return value
+    let position = this.#positions.get(value)
+    if (position === undefined) {
+      position = this.strings.push(value) - 1
+      this.#positions.set(value, position)
 
       // Encode strings on insertion
-      const encoded = encodeLengthDelimited(toUtf8(string))
+      const encoded = encodeLengthDelimited(toUtf8(value))
       this.#encodings.push(encoded)
       this.#encodedLength += encoded.length
     }
-    return this.#positions.get(string)!
+    return position
   }
 
   _decodeString(buffer: Uint8Array) {
-    const string = decodeString(buffer)
-    this.#positions.set(string, this.strings.push(string) - 1)
+    const value = decodeString(buffer)
+    this.#positions.set(value, this.strings.push(value) - 1)
     const encoded = encodeLengthDelimited(buffer)
     this.#encodings.push(encoded)
     this.#encodedLength += encoded.length
