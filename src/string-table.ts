@@ -29,14 +29,51 @@ function encodeLengthDelimited(utf8: Uint8Array | Buffer): Uint8Array {
   return buffer
 }
 
+// The UTF-8 length of a string, counting a lone surrogate as U+FFFD the way
+// Buffer and TextEncoder write it
+function utf8Length(value: string): number {
+  let length = value.length
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i)
+    if (code < 0x80) continue
+    if (code < 0x800) {
+      length += 1
+    } else if (code >= 0xd800 && code <= 0xdbff && i + 1 < value.length &&
+      (value.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
+      length += 2
+      i++
+    } else {
+      length += 2
+    }
+  }
+  return length
+}
+
+const utf8ByteLength = typeof Buffer === 'undefined'
+  ? utf8Length
+  : (value: string) => Buffer.byteLength(value, 'utf8')
+
+// Writes a string's UTF-8 bytes into `buffer` at `offset`
+function utf8Writer(buffer: Uint8Array): (value: string, offset: number) => void {
+  if (typeof Buffer === 'undefined') {
+    const encoder = new TextEncoder()
+    return (value, offset) => { encoder.encodeInto(value, buffer.subarray(offset)) }
+  }
+  const view = Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+  return (value, offset) => { view.write(value, offset, 'utf8') }
+}
+
 /**
- * The strings of a profile, each encoded once as it is added. The enclosing
- * message supplies the field number when it encodes the table, so one table
- * type serves both pprof and OTel.
+ * The strings of a profile. A string's UTF-8 bytes are written straight into
+ * the output when the table is encoded, so adding a string allocates no
+ * buffer. The enclosing message supplies the field number when it encodes the
+ * table, so one table type serves both pprof and OTel.
  */
 export class StringTable {
   strings = new Array<string>()
-  #encodings = new Array<Uint8Array>()
+  #byteLengths = new Array<number>()
+  // The bytes of strings read from a profile, which re-encoding reproduces exactly
+  #decoded = new Array<Uint8Array | undefined>()
   #positions = new Map<string, number>()
   #encodedLength = 0
 
@@ -54,15 +91,23 @@ export class StringTable {
 
   /** Measures the strings as the repeated string field `field`. */
   _measure(field: number): number {
-    return this.#encodings.length * measureTag(field) + this.#encodedLength
+    return this.#byteLengths.length * measureTag(field) + this.#encodedLength
   }
 
   /** Encodes the strings as the repeated string field `field`. */
   _encodeToBuffer(buffer: Uint8Array, offset: number, field: number): number {
-    for (const encoded of this.#encodings) {
+    const writeUtf8 = utf8Writer(buffer)
+    for (let i = 0; i < this.#byteLengths.length; i++) {
+      const byteLength = this.#byteLengths[i]
       offset = encodeTag(buffer, offset, field, kTypeLengthDelim)
-      buffer.set(encoded, offset)
-      offset += encoded.length
+      offset = encodeNumber(buffer, offset, byteLength)
+      const decoded = this.#decoded[i]
+      if (decoded !== undefined) {
+        buffer.set(decoded, offset)
+      } else if (byteLength > 0) {
+        writeUtf8(this.strings[i], offset)
+      }
+      offset += byteLength
     }
     return offset
   }
@@ -89,22 +134,21 @@ export class StringTable {
     if (typeof value === 'number') return value
     let position = this.#positions.get(value)
     if (position === undefined) {
-      position = this.strings.push(value) - 1
-      this.#positions.set(value, position)
-
-      // Encode strings on insertion
-      const encoded = encodeLengthDelimited(toUtf8(value))
-      this.#encodings.push(encoded)
-      this.#encodedLength += encoded.length
+      position = this.#add(value, utf8ByteLength(value))
     }
     return position
   }
 
   _decodeString(buffer: Uint8Array) {
-    const value = decodeString(buffer)
-    this.#positions.set(value, this.strings.push(value) - 1)
-    const encoded = encodeLengthDelimited(buffer)
-    this.#encodings.push(encoded)
-    this.#encodedLength += encoded.length
+    const position = this.#add(decodeString(buffer), buffer.length)
+    this.#decoded[position] = buffer.slice()
+  }
+
+  #add(value: string, byteLength: number): number {
+    const position = this.strings.push(value) - 1
+    this.#positions.set(value, position)
+    this.#byteLengths.push(byteLength)
+    this.#encodedLength += varintLength(byteLength) + byteLength
+    return position
   }
 }

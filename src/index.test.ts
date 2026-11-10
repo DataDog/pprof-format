@@ -466,6 +466,22 @@ test('StringTable', async (t) => {
     table.dedup('hello')
     assert.strictEqual(bufToHex(table.encode()), encodings[''] + encodings['hello'])
   })
+
+  await t.test('encodes non-ASCII strings as TextEncoder does', async () => {
+    const strings = ['é', '日本語', '😀 emoji', 'lone \uD800 high', 'lone \uDC00 low', 'x'.repeat(200) + 'ü']
+    const table = new StringTable()
+    for (const s of strings) table.dedup(s)
+    const encoded = table.encode()
+    assert.strictEqual(encoded.length, table.encodedLength)
+    assert.strictEqual(bufToHex(encoded), encodeStringTable(table))
+  })
+
+  await t.test('re-encodes decoded strings byte for byte', async () => {
+    // 0xff is not valid UTF-8, so the decoded string alone can't reproduce it
+    const raw = hexToBuf('3200' + '3203' + '61ff62')
+    const decoded = Profile.decode(raw).stringTable
+    assert.strictEqual(bufToHex(decoded.encode()), bufToHex(raw))
+  })
 })
 
 function profileToObject(profile: any): object {
