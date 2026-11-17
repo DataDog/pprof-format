@@ -82,15 +82,21 @@ test('varint boundaries', async (t) => {
     [0, '00'],
     [-0, '00'],
     [1, '01'],
+    [0.5, '00'],
     [127, '7f'],
+    [127.5, '7f'],
     [128, '8001'],
     [16383, 'ff7f'],
+    [16383.5, 'ff7f'],
     [16384, '808001'],
     [2097151, 'ffff7f'],
+    [2097151.5, 'ffff7f'],
     [2097152, '80808001'],
     [268435455, 'ffffff7f'],
+    [268435455.5, 'ffffff7f'],
     [268435456, '8080808001'],
     [4294967295, 'ffffffff0f'],
+    [4294967295.5, 'ffffffff0f'],
     [4294967296, '8080808010'],
     [Number.MAX_SAFE_INTEGER, 'ffffffffffffff0f'],
     [-1, 'ffffffffffffffffff01'],
@@ -101,7 +107,7 @@ test('varint boundaries', async (t) => {
     [-(2n ** 63n), '80808080808080808001']
   ]
   for (const [number, encoded] of cases) {
-    const values = typeof number === 'number' ? [number, BigInt(number)] : [number]
+    const values = typeof number === 'number' && Number.isInteger(number) ? [number, BigInt(number)] : [number]
     for (const value of values) {
       await t.test(`${value} (${typeof value})`, () => {
         const sample = new Sample({ value: [value] })

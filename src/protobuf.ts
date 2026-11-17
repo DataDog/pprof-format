@@ -226,27 +226,19 @@ export function varintLength(number: Numeric): number {
 }
 
 export function encodeNumber(buffer: Uint8Array, i: number, number: Numeric): number {
-  if (typeof number === 'number' && number >= 0 && number <= lowMax) {
-    number >>>= 0
-    while (number > 127) {
-      buffer[i++] = number & 127 | 128
-      number >>>= 7
+  let lo = number as number
+  if (typeof number !== 'number' || number < 0 || number > lowMax) {
+    const words = long(number)
+    let hi = words[0]
+    lo = words[1]
+    while (hi) {
+      buffer[i++] = lo & 127 | 128
+      lo = (lo >>> 7 | hi << 25) >>> 0
+      hi >>>= 7
     }
-    buffer[i++] = number
-    return i
-  }
-  if (number === 0 || number === 0n) {
-    buffer[i++] = 0
-    return i
   }
 
-  let [hi, lo] = long(number)
-
-  while (hi) {
-    buffer[i++] = lo & 127 | 128
-    lo = (lo >>> 7 | hi << 25) >>> 0
-    hi >>>= 7
-  }
+  lo >>>= 0
   while (lo > 127) {
     buffer[i++] = lo & 127 | 128
     lo = lo >>> 7
