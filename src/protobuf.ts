@@ -186,24 +186,36 @@ export function pushAll<T>(values: Array<T>, list?: Array<T>): Array<T> {
 export function measureNumber(number: Numeric): number {
   let lo: number
   if (typeof number === 'number' && number >= 0 && number <= lowMax) {
-    if (number === 0) return 0
+    if (number === 0) {
+      return 0
+    }
     lo = number
   } else {
-    if (number === 0n) return 0
+    if (number === 0n) {
+      return 0
+    }
     const words = long(number)
     const hi = words[0]
     lo = words[1]
     if (hi !== 0) {
       const c = hi >>> 24
-      if (c !== 0) return c < 128 ? 9 : 10
+      if (c !== 0) {
+        return c < 128 ? 9 : 10
+      }
       const b = (lo >>> 28 | hi << 4) >>> 0
-      if (b < 16384) return b < 128 ? 5 : 6
+      if (b < 16384) {
+        return b < 128 ? 5 : 6
+      }
       return b < 2097152 ? 7 : 8
     }
   }
 
-  if (lo < 16384) return lo < 128 ? 1 : 2
-  if (lo < 268435456) return lo < 2097152 ? 3 : 4
+  if (lo < 16384) {
+    return lo < 128 ? 1 : 2
+  }
+  if (lo < 268435456) {
+    return lo < 2097152 ? 3 : 4
+  }
   return 5
 }
 
