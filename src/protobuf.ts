@@ -6,7 +6,6 @@
 
 /* Internal protobuf wire-format helpers shared by the codecs. */
 
-const lowMaxBig = 2n ** 32n - 1n
 const lowMax = 2 ** 32 - 1
 const lowMaxPlus1 = lowMax + 1
 // Largest high 32 bits of a 64-bit integer that still fits in a safe integer.
@@ -58,31 +57,27 @@ function decodeSmallNumber(buffer: Uint8Array, start: number, end: number): numb
   return value
 }
 
-function lowBits(number: Numeric): number {
-  return typeof number !== 'bigint'
-    ? (number >>> 0) % lowMaxPlus1
-    : Number(number & lowMaxBig)
-}
-
-function highBits(number: Numeric): number {
-  return typeof number !== 'bigint'
-    ? (number / lowMaxPlus1) >>> 0
-    : Number(number >> 32n & lowMaxBig)
-}
-
 function long(number: Numeric): Array<number> {
-  const sign = number < 0
-  if (sign) number = -number
+  if (typeof number === 'bigint') {
+    return [Number(BigInt.asUintN(32, number >> 32n)), Number(BigInt.asUintN(32, number))]
+  }
 
-  let lo = lowBits(number)
-  let hi = highBits(number)
+  const sign = number < 0
+  if (sign) {
+    number = -number
+  }
+
+  let lo = (number >>> 0) % lowMaxPlus1
+  let hi = (number / lowMaxPlus1) >>> 0
 
   if (sign) {
     hi = ~hi >>> 0
     lo = ~lo >>> 0
     if (++lo > lowMax) {
       lo = 0
-      if (++hi > lowMax) { hi = 0 }
+      if (++hi > lowMax) {
+        hi = 0
+      }
     }
   }
 
@@ -266,7 +261,7 @@ export function encodeFixed64(buffer: Uint8Array, i: number, number: Numeric): n
 }
 
 /**
- * Submessage lengths for one encode, recorded in length-prefix order and read
+ * Payload lengths for one encode, recorded in length-prefix order and read
  * back sequentially to avoid remeasuring. No state is stored on the messages;
  * the context is passed through measuring and encoding instead.
  */
@@ -373,16 +368,22 @@ function measurePackedNumbers(values: Numeric[]): number {
   return total
 }
 
-export function measurePackedNumbersField(field: number, values: Numeric[]): number {
+export function measurePackedNumbersField(field: number, values: Numeric[], context: EncodeContext): number {
   // Packed arrays are encoded as Tag,Len,ConcatenatedElements
   const total = measurePackedNumbers(values)
-  return total ? measureTag(field) + measureNumber(total) + total : 0
+  if (!total) {
+    return 0
+  }
+  context.lengths.push(total)
+  return measureTag(field) + measureNumber(total) + total
 }
 
-export function encodePackedNumbersField(buffer: Uint8Array, offset: number, field: number, values: Numeric[]): number {
-  if (!values.length) return offset
+export function encodePackedNumbersField(buffer: Uint8Array, offset: number, field: number, values: Numeric[], context: EncodeContext): number {
+  if (!values.length) {
+    return offset
+  }
   offset = encodeTag(buffer, offset, field, kTypeLengthDelim)
-  offset = encodeNumber(buffer, offset, measurePackedNumbers(values))
+  offset = encodeNumber(buffer, offset, context.lengths[context.cursor++])
   for (const value of values) {
     offset = encodeNumber(buffer, offset, value)
   }

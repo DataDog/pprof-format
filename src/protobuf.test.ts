@@ -34,7 +34,7 @@ import {
   measurePackedFixed64Field,
   newEncodeContext
 } from './protobuf.js'
-import { Label, LabelInput, Profile, Sample, StringTable, ValueType } from './index.js'
+import { Label, LabelInput, Profile, Sample, StringTable, ValueType, emptyTableToken } from './index.js'
 
 function hex(buf: Uint8Array) {
   return Buffer.from(buf).toString('hex')
@@ -116,7 +116,11 @@ test('varint boundaries', async (t) => {
     [2n ** 63n - 1n, 'ffffffffffffffff7f'],
     [2n ** 63n, '80808080808080808001'],
     [2n ** 64n - 1n, 'ffffffffffffffffff01'],
-    [-(2n ** 63n), '80808080808080808001']
+    [-(2n ** 63n), '80808080808080808001'],
+    [2n ** 64n, '00'],
+    [2n ** 64n + 1n, '01'],
+    [-(2n ** 64n) - 1n, 'ffffffffffffffffff01'],
+    [2n ** 128n + 2n ** 32n, '8080808010']
   ]
   for (const [number, encoded] of cases) {
     const values = typeof number === 'number' && Number.isInteger(number) ? [number, BigInt(number)] : [number]
@@ -137,20 +141,24 @@ test('varint boundaries', async (t) => {
 })
 
 test('fixed64', async (t) => {
-  const cases: Array<[Numeric, string]> = [
-    [1, '0100000000000000'],
-    [2 ** 53 - 1, 'ffffffffffff1f00'],
-    [1700000000123456789n, '15cd853dfe9c9717'],
-    [-1, 'ffffffffffffffff']
+  const cases: Array<[Numeric, string, Numeric]> = [
+    [1, '0100000000000000', 1],
+    [2 ** 53 - 1, 'ffffffffffff1f00', 2 ** 53 - 1],
+    [1700000000123456789n, '15cd853dfe9c9717', 1700000000123456789n],
+    [-1, 'ffffffffffffffff', 2n ** 64n - 1n],
+    [-1n, 'ffffffffffffffff', 2n ** 64n - 1n],
+    [-(2n ** 63n), '0000000000000080', 2n ** 63n],
+    [2n ** 64n, '0000000000000000', 0],
+    [2n ** 96n + 1n, '0100000000000000', 1],
+    [-(2n ** 64n) - 1n, 'ffffffffffffffff', 2n ** 64n - 1n]
   ]
-  for (const [number, encoded] of cases) {
+  for (const [number, encoded, expected] of cases) {
     await t.test(`encodes and decodes ${number}`, () => {
       const buffer = encodeField(measureFixed64Field, encodeFixed64Field, 3, number)
       assert.strictEqual(hex(buffer), '19' + encoded)
       const [field, wireType, value] = decodeSingle(buffer)
       assert.strictEqual(field, 3)
       assert.strictEqual(wireType, kTypeFixed64)
-      const expected = number === -1 ? 2n ** 64n - 1n : number
       assert.strictEqual(decodeFixed64(value), expected)
     })
   }
@@ -208,6 +216,23 @@ test('bytes', () => {
 })
 
 test('message fields', async (t) => {
+  await t.test('interleaves empty and packed fields with nested messages', async () => {
+    const profile = new Profile({
+      stringTable: new StringTable(emptyTableToken),
+      sample: [{}, { locationId: [0, 128], value: [0, -1n], label: [{ key: 1 }] }, { value: [1] }],
+      periodType: {},
+      comment: [0, 16384]
+    })
+    const expected = '120012160a03008001120b00ffffffffffffffffff011a02080112031201015a006a0400808001'
+    assert.strictEqual(hex(profile.encode()), expected)
+    assert.strictEqual(profile.length, expected.length / 2)
+    const pending = Promise.all([profile.encodeAsync(), profile.encodeAsync()])
+    assert.strictEqual(hex(profile.encode()), expected)
+    for (const encoded of await pending) {
+      assert.strictEqual(hex(encoded), expected)
+    }
+  })
+
   await t.test('encodes an empty message that is present', () => {
     const empty = new ValueType({})
     const context = newEncodeContext()

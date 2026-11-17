@@ -1048,7 +1048,7 @@ export class Profile extends Message {
     total += measureNumberField(ProfileField.droppedAttributesCount, this.droppedAttributesCount)
     total += measureStringField(ProfileField.originalPayloadFormat, this.originalPayloadFormat)
     total += measureBytesField(ProfileField.originalPayload, this.originalPayload)
-    total += measurePackedNumbersField(ProfileField.attributeIndices, this.attributeIndices)
+    total += measurePackedNumbersField(ProfileField.attributeIndices, this.attributeIndices, context)
     return total
   }
 
@@ -1063,7 +1063,7 @@ export class Profile extends Message {
     offset = encodeNumberField(buffer, offset, ProfileField.droppedAttributesCount, this.droppedAttributesCount)
     offset = encodeStringField(buffer, offset, ProfileField.originalPayloadFormat, this.originalPayloadFormat)
     offset = encodeBytesField(buffer, offset, ProfileField.originalPayload, this.originalPayload)
-    offset = encodePackedNumbersField(buffer, offset, ProfileField.attributeIndices, this.attributeIndices)
+    offset = encodePackedNumbersField(buffer, offset, ProfileField.attributeIndices, this.attributeIndices, context)
     return offset
   }
 
@@ -1264,21 +1264,21 @@ export class Sample extends Message {
     this.timestampsUnixNano = data.timestampsUnixNano || []
   }
 
-  _measure() {
+  _measure(context: EncodeContext) {
     let total = 0
     total += measureNumberField(SampleField.stackIndex, this.stackIndex)
-    total += measurePackedNumbersField(SampleField.attributeIndices, this.attributeIndices)
+    total += measurePackedNumbersField(SampleField.attributeIndices, this.attributeIndices, context)
     total += measureNumberField(SampleField.linkIndex, this.linkIndex)
-    total += measurePackedNumbersField(SampleField.values, this.values)
+    total += measurePackedNumbersField(SampleField.values, this.values, context)
     total += measurePackedFixed64Field(SampleField.timestampsUnixNano, this.timestampsUnixNano)
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
+  _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
     offset = encodeNumberField(buffer, offset, SampleField.stackIndex, this.stackIndex)
-    offset = encodePackedNumbersField(buffer, offset, SampleField.attributeIndices, this.attributeIndices)
+    offset = encodePackedNumbersField(buffer, offset, SampleField.attributeIndices, this.attributeIndices, context)
     offset = encodeNumberField(buffer, offset, SampleField.linkIndex, this.linkIndex)
-    offset = encodePackedNumbersField(buffer, offset, SampleField.values, this.values)
+    offset = encodePackedNumbersField(buffer, offset, SampleField.values, this.values, context)
     offset = encodePackedFixed64Field(buffer, offset, SampleField.timestampsUnixNano, this.timestampsUnixNano)
     return offset
   }
@@ -1353,22 +1353,22 @@ export class Mapping extends Message {
     this.attributeIndices = data.attributeIndices || []
   }
 
-  _measure() {
+  _measure(context: EncodeContext) {
     let total = 0
     total += measureNumberField(MappingField.memoryStart, this.memoryStart)
     total += measureNumberField(MappingField.memoryLimit, this.memoryLimit)
     total += measureNumberField(MappingField.fileOffset, this.fileOffset)
     total += measureNumberField(MappingField.filenameStrindex, this.filenameStrindex)
-    total += measurePackedNumbersField(MappingField.attributeIndices, this.attributeIndices)
+    total += measurePackedNumbersField(MappingField.attributeIndices, this.attributeIndices, context)
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
+  _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
     offset = encodeNumberField(buffer, offset, MappingField.memoryStart, this.memoryStart)
     offset = encodeNumberField(buffer, offset, MappingField.memoryLimit, this.memoryLimit)
     offset = encodeNumberField(buffer, offset, MappingField.fileOffset, this.fileOffset)
     offset = encodeNumberField(buffer, offset, MappingField.filenameStrindex, this.filenameStrindex)
-    offset = encodePackedNumbersField(buffer, offset, MappingField.attributeIndices, this.attributeIndices)
+    offset = encodePackedNumbersField(buffer, offset, MappingField.attributeIndices, this.attributeIndices, context)
     return offset
   }
 
@@ -1421,12 +1421,12 @@ export class Stack extends Message {
     this.locationIndices = data.locationIndices || []
   }
 
-  _measure() {
-    return measurePackedNumbersField(StackField.locationIndices, this.locationIndices)
+  _measure(context: EncodeContext) {
+    return measurePackedNumbersField(StackField.locationIndices, this.locationIndices, context)
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    return encodePackedNumbersField(buffer, offset, StackField.locationIndices, this.locationIndices)
+  _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    return encodePackedNumbersField(buffer, offset, StackField.locationIndices, this.locationIndices, context)
   }
 
   static decodeValue(data: StackInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
@@ -1483,7 +1483,7 @@ export class Location extends Message {
     total += measureNumberField(LocationField.mappingIndex, this.mappingIndex)
     total += measureNumberField(LocationField.address, this.address)
     total += measureMessageArrayField(LocationField.lines, this.lines, context)
-    total += measurePackedNumbersField(LocationField.attributeIndices, this.attributeIndices)
+    total += measurePackedNumbersField(LocationField.attributeIndices, this.attributeIndices, context)
     return total
   }
 
@@ -1491,7 +1491,7 @@ export class Location extends Message {
     offset = encodeNumberField(buffer, offset, LocationField.mappingIndex, this.mappingIndex)
     offset = encodeNumberField(buffer, offset, LocationField.address, this.address)
     offset = encodeMessageArrayField(buffer, offset, LocationField.lines, this.lines, context)
-    offset = encodePackedNumbersField(buffer, offset, LocationField.attributeIndices, this.attributeIndices)
+    offset = encodePackedNumbersField(buffer, offset, LocationField.attributeIndices, this.attributeIndices, context)
     return offset
   }
 
