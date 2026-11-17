@@ -83,6 +83,10 @@ test('varint boundaries', async (t) => {
     [-0, '00'],
     [1, '01'],
     [0.5, '00'],
+    [-0.5, '00'],
+    [NaN, '00'],
+    [Infinity, '00'],
+    [-Infinity, '00'],
     [127, '7f'],
     [127.5, '7f'],
     [128, '8001'],
@@ -98,9 +102,17 @@ test('varint boundaries', async (t) => {
     [4294967295, 'ffffffff0f'],
     [4294967295.5, 'ffffffff0f'],
     [4294967296, '8080808010'],
+    [2 ** 35 - 1, 'ffffffff7f'],
+    [2 ** 35, '808080808001'],
+    [2 ** 42 - 1, 'ffffffffff7f'],
+    [2 ** 42, '80808080808001'],
+    [2 ** 49 - 1, 'ffffffffffff7f'],
+    [2 ** 49, '8080808080808001'],
     [Number.MAX_SAFE_INTEGER, 'ffffffffffffff0f'],
     [-1, 'ffffffffffffffffff01'],
     [-4294967296, '80808080f0ffffffff01'],
+    [2n ** 56n - 1n, 'ffffffffffffff7f'],
+    [2n ** 56n, '808080808080808001'],
     [2n ** 63n - 1n, 'ffffffffffffffff7f'],
     [2n ** 63n, '80808080808080808001'],
     [2n ** 64n - 1n, 'ffffffffffffffffff01'],
@@ -116,7 +128,7 @@ test('varint boundaries', async (t) => {
         assert.strictEqual(sample.length, buffer.length)
 
         const label = new Label({ num: value })
-        const expected = value === 0 || value === 0n ? '' : '18' + encoded
+        const expected = value === 0 || value === 0n || Number.isNaN(value) ? '' : '18' + encoded
         assert.strictEqual(hex(label.encode()), expected)
         assert.strictEqual(label.length, expected.length / 2)
       })
