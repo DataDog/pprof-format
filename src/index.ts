@@ -246,15 +246,15 @@ export class Sample extends Message {
 
   _measure(context: EncodeContext) {
     let total = 0
-    total += measurePackedNumbersField(SampleField.locationId, this.locationId)
-    total += measurePackedNumbersField(SampleField.value, this.value)
+    total += measurePackedNumbersField(SampleField.locationId, this.locationId, context)
+    total += measurePackedNumbersField(SampleField.value, this.value, context)
     total += measureMessageArrayField(SampleField.label, this.label, context)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
-    offset = encodePackedNumbersField(buffer, offset, SampleField.locationId, this.locationId)
-    offset = encodePackedNumbersField(buffer, offset, SampleField.value, this.value)
+    offset = encodePackedNumbersField(buffer, offset, SampleField.locationId, this.locationId, context)
+    offset = encodePackedNumbersField(buffer, offset, SampleField.value, this.value, context)
     offset = encodeMessageArrayField(buffer, offset, SampleField.label, this.label, context)
     return offset
   }
@@ -658,7 +658,7 @@ export class Profile extends Message {
     total += measureNumberField(ProfileField.durationNanos, this.durationNanos)
     total += measureMessageField(ProfileField.periodType, this.periodType, context)
     total += measureNumberField(ProfileField.period, this.period)
-    total += measurePackedNumbersField(ProfileField.comment, this.comment)
+    total += measurePackedNumbersField(ProfileField.comment, this.comment, context)
     total += measureNumberField(ProfileField.defaultSampleType, this.defaultSampleType)
     total += measureNumberField(ProfileField.docUrl, this.docUrl)
     return total
@@ -691,7 +691,7 @@ export class Profile extends Message {
     offset = encodeNumberField(buffer, offset, ProfileField.durationNanos, this.durationNanos)
     offset = encodeMessageField(buffer, offset, ProfileField.periodType, this.periodType, context)
     offset = encodeNumberField(buffer, offset, ProfileField.period, this.period)
-    offset = encodePackedNumbersField(buffer, offset, ProfileField.comment, this.comment)
+    offset = encodePackedNumbersField(buffer, offset, ProfileField.comment, this.comment, context)
     offset = encodeNumberField(buffer, offset, ProfileField.defaultSampleType, this.defaultSampleType)
     offset = encodeNumberField(buffer, offset, ProfileField.docUrl, this.docUrl)
     return offset
