@@ -184,6 +184,11 @@ export function pushAll<T>(values: Array<T>, list?: Array<T>): Array<T> {
 }
 
 export function measureNumber(number: Numeric): number {
+  if (typeof number === 'number' && number > 0 && number <= lowMax) {
+    if (number < 16384) return number < 128 ? 1 : 2
+    if (number < 268435456) return number < 2097152 ? 3 : 4
+    return 5
+  }
   if (number === 0 || number === 0n) return 0
   const [hi, lo] = long(number)
 
@@ -221,6 +226,15 @@ export function varintLength(number: Numeric): number {
 }
 
 export function encodeNumber(buffer: Uint8Array, i: number, number: Numeric): number {
+  if (typeof number === 'number' && number >= 0 && number <= lowMax) {
+    number >>>= 0
+    while (number > 127) {
+      buffer[i++] = number & 127 | 128
+      number >>>= 7
+    }
+    buffer[i++] = number
+    return i
+  }
   if (number === 0 || number === 0n) {
     buffer[i++] = 0
     return i
