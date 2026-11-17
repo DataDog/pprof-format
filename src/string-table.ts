@@ -10,7 +10,9 @@ import {
   encodeTag,
   kTypeLengthDelim,
   measureTag,
+  prepareBuffer,
   toUtf8,
+  utf8Length,
   varintLength,
 } from './protobuf.js'
 
@@ -27,26 +29,6 @@ function encodeLengthDelimited(utf8: Uint8Array | Buffer): Uint8Array {
     buffer.set(utf8, offset)
   }
   return buffer
-}
-
-// The UTF-8 length of a string, counting a lone surrogate as U+FFFD the way
-// Buffer and TextEncoder write it
-function utf8Length(value: string): number {
-  let length = value.length
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i)
-    if (code < 0x80) continue
-    if (code < 0x800) {
-      length += 1
-    } else if (code >= 0xd800 && code <= 0xdbff && i + 1 < value.length &&
-      (value.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
-      length += 2
-      i++
-    } else {
-      length += 2
-    }
-  }
-  return length
 }
 
 const utf8ByteLength = typeof Buffer === 'undefined'
@@ -113,7 +95,8 @@ export class StringTable {
   }
 
   /** Encodes the strings as pprof's string_table. */
-  encode(buffer = new Uint8Array(this.encodedLength)): Uint8Array {
+  encode(buffer?: Uint8Array): Uint8Array {
+    buffer = prepareBuffer(buffer, this.encodedLength)
     this._encodeToBuffer(buffer, 0, pprofStringTableField)
     return buffer
   }
@@ -141,7 +124,9 @@ export class StringTable {
 
   _decodeString(buffer: Uint8Array) {
     const position = this.#add(decodeString(buffer), buffer.length)
-    this.#decoded[position] = buffer.slice()
+    this.#decoded[position] = buffer.length <= 64 || typeof Buffer === 'undefined'
+      ? new Uint8Array(buffer)
+      : Buffer.from(buffer)
   }
 
   #add(value: string, byteLength: number): number {
