@@ -5,7 +5,7 @@
  */
 
 import { test } from 'node:test'
-import assert from 'node:assert'
+import assert from 'node:assert/strict'
 
 import {
   EncodeContext,
@@ -74,6 +74,65 @@ test('multi-byte tags', async (t) => {
       assert.strictEqual(wireType, kTypeVarInt)
       assert.strictEqual(decodeNumber(value), 300)
     })
+  }
+})
+
+test('varint boundaries', async (t) => {
+  const cases: Array<[Numeric, string]> = [
+    [0, '00'],
+    [-0, '00'],
+    [1, '01'],
+    [0.5, '00'],
+    [-0.5, '00'],
+    [NaN, '00'],
+    [Infinity, '00'],
+    [-Infinity, '00'],
+    [127, '7f'],
+    [127.5, '7f'],
+    [128, '8001'],
+    [16383, 'ff7f'],
+    [16383.5, 'ff7f'],
+    [16384, '808001'],
+    [2097151, 'ffff7f'],
+    [2097151.5, 'ffff7f'],
+    [2097152, '80808001'],
+    [268435455, 'ffffff7f'],
+    [268435455.5, 'ffffff7f'],
+    [268435456, '8080808001'],
+    [4294967295, 'ffffffff0f'],
+    [4294967295.5, 'ffffffff0f'],
+    [4294967296, '8080808010'],
+    [2 ** 35 - 1, 'ffffffff7f'],
+    [2 ** 35, '808080808001'],
+    [2 ** 42 - 1, 'ffffffffff7f'],
+    [2 ** 42, '80808080808001'],
+    [2 ** 49 - 1, 'ffffffffffff7f'],
+    [2 ** 49, '8080808080808001'],
+    [Number.MAX_SAFE_INTEGER, 'ffffffffffffff0f'],
+    [-1, 'ffffffffffffffffff01'],
+    [-4294967296, '80808080f0ffffffff01'],
+    [2n ** 56n - 1n, 'ffffffffffffff7f'],
+    [2n ** 56n, '808080808080808001'],
+    [2n ** 63n - 1n, 'ffffffffffffffff7f'],
+    [2n ** 63n, '80808080808080808001'],
+    [2n ** 64n - 1n, 'ffffffffffffffffff01'],
+    [-(2n ** 63n), '80808080808080808001']
+  ]
+  for (const [number, encoded] of cases) {
+    const values = typeof number === 'number' && Number.isInteger(number) ? [number, BigInt(number)] : [number]
+    for (const value of values) {
+      await t.test(`${value} (${typeof value})`, () => {
+        const sample = new Sample({ value: [value] })
+        const buffer = sample.encode()
+        assert.strictEqual(hex(buffer), '12' + hex(Uint8Array.of(encoded.length / 2)) + encoded)
+        assert.strictEqual(sample.length, buffer.length)
+
+        const label = new Label({ num: value })
+        const expected = value === 0 || value === 0n || Number.isNaN(value) ? '' : '18' + encoded
+        assert.strictEqual(hex(label.encode()), expected)
+        assert.strictEqual(label.length, expected.length / 2)
+      })
+    }
   }
 })
 
