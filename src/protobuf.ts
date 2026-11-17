@@ -184,30 +184,39 @@ export function pushAll<T>(values: Array<T>, list?: Array<T>): Array<T> {
 }
 
 export function measureNumber(number: Numeric): number {
-  if (number === 0 || number === 0n) return 0
-  const [hi, lo] = long(number)
-
-  const a = lo
-  const b = (lo >>> 28 | hi << 4) >>> 0
-  const c = hi >>> 24
-
-  if (c !== 0) {
-    return c < 128 ? 9 : 10
-  }
-
-  if (b !== 0) {
-    if (b < 16384) {
-      return b < 128 ? 5 : 6
+  let lo: number
+  if (typeof number === 'number' && number >= 0 && number <= lowMax) {
+    if (number === 0) {
+      return 0
     }
-
-    return b < 2097152 ? 7 : 8
+    lo = number
+  } else {
+    if (number === 0n) {
+      return 0
+    }
+    const words = long(number)
+    const hi = words[0]
+    lo = words[1]
+    if (hi !== 0) {
+      const c = hi >>> 24
+      if (c !== 0) {
+        return c < 128 ? 9 : 10
+      }
+      const b = (lo >>> 28 | hi << 4) >>> 0
+      if (b < 16384) {
+        return b < 128 ? 5 : 6
+      }
+      return b < 2097152 ? 7 : 8
+    }
   }
 
-  if (a < 16384) {
-    return a < 128 ? 1 : 2
+  if (lo < 16384) {
+    return lo < 128 ? 1 : 2
   }
-
-  return a < 2097152 ? 3 : 4
+  if (lo < 268435456) {
+    return lo < 2097152 ? 3 : 4
+  }
+  return 5
 }
 
 /**
@@ -221,18 +230,19 @@ export function varintLength(number: Numeric): number {
 }
 
 export function encodeNumber(buffer: Uint8Array, i: number, number: Numeric): number {
-  if (number === 0 || number === 0n) {
-    buffer[i++] = 0
-    return i
+  let lo = number as number
+  if (typeof number !== 'number' || number < 0 || number > lowMax) {
+    const words = long(number)
+    let hi = words[0]
+    lo = words[1]
+    while (hi) {
+      buffer[i++] = lo & 127 | 128
+      lo = (lo >>> 7 | hi << 25) >>> 0
+      hi >>>= 7
+    }
   }
 
-  let [hi, lo] = long(number)
-
-  while (hi) {
-    buffer[i++] = lo & 127 | 128
-    lo = (lo >>> 7 | hi << 25) >>> 0
-    hi >>>= 7
-  }
+  lo >>>= 0
   while (lo > 127) {
     buffer[i++] = lo & 127 | 128
     lo = lo >>> 7
