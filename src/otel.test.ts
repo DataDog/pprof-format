@@ -26,6 +26,7 @@ import {
 } from './otel.js'
 import * as otel from './otel.js'
 import { StringTable as PprofStringTable } from './index.js'
+import type { EncodeContext } from './protobuf.js'
 
 const pb = otelProto.opentelemetry.proto
 
@@ -247,9 +248,9 @@ test('ExportProfilesServiceRequest.encodeAsync', async (t) => {
   await t.test('measures each submessage once', async () => {
     const measure = Sample.prototype._measure
     let calls = 0
-    Sample.prototype._measure = function (this: Sample) {
+    Sample.prototype._measure = function (this: Sample, context: EncodeContext) {
       calls++
-      return measure.call(this)
+      return measure.call(this, context)
     }
     try {
       await new ExportProfilesServiceRequest(exampleRequest()).encodeAsync()
@@ -271,6 +272,11 @@ test('ExportProfilesServiceRequest.encodeAsync', async (t) => {
     request.dictionary!.stringTable.dedup('added during encoding')
     await assert.rejects(encoding, /Encoded \d+ bytes but measured \d+/)
   })
+})
+
+test('Stack encodes packed location indices without a parent message', () => {
+  assert.strictEqual(hex(new otel.Stack().encode()), '')
+  assert.strictEqual(hex(new otel.Stack({ locationIndices: [0, 128] }).encode()), '0a03008001')
 })
 
 test('ExportProfilesServiceResponse', () => {
