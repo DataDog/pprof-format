@@ -332,7 +332,11 @@ test('ProfilesDictionary', async (t) => {
 })
 
 test('string fields are encoded as UTF-8', () => {
-  for (const key of ['plain', 'café', '✓', '😀', 'lone \ud800 surrogate']) {
+  for (const key of [
+    'plain', 'café', '✓', '😀', 'lone \ud800 surrogate',
+    '\u007f', '\u0080', '\u07ff', '\u0800', '\ud7ff', '\ud800', '\udbff', '\udc00', '\udfff', '\ue000', '\uffff',
+    '\ud800\udc00', '\udbff\udfff', '\ud800\ud800', '\ud800\ue000', '\udc00\ud800',
+  ]) {
     const utf8 = Buffer.from(key, 'utf8')
     const encoded = new KeyValue({ key }).encode()
     assert.strictEqual(hex(encoded), '0a' + utf8.length.toString(16).padStart(2, '0') + utf8.toString('hex'), key)
