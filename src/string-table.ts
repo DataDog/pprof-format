@@ -36,13 +36,13 @@ const utf8ByteLength = typeof Buffer === 'undefined'
   : (value: string) => Buffer.byteLength(value, 'utf8')
 
 // Writes a string's UTF-8 bytes into `buffer` at `offset`
-function utf8Writer(buffer: Uint8Array): (value: string, offset: number) => void {
+function utf8Writer(buffer: Uint8Array): (value: string, offset: number, length: number) => void {
   if (typeof Buffer === 'undefined') {
     const encoder = new TextEncoder()
-    return (value, offset) => { encoder.encodeInto(value, buffer.subarray(offset)) }
+    return (value, offset, length) => { encoder.encodeInto(value, buffer.subarray(offset, offset + length)) }
   }
   const view = Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength)
-  return (value, offset) => { view.write(value, offset, 'utf8') }
+  return (value, offset, length) => { view.write(value, offset, length, 'utf8') }
 }
 
 /**
@@ -54,8 +54,7 @@ function utf8Writer(buffer: Uint8Array): (value: string, offset: number) => void
 export class StringTable {
   strings = new Array<string>()
   #byteLengths = new Array<number>()
-  // The bytes of strings read from a profile, which re-encoding reproduces exactly
-  #decoded = new Array<Uint8Array | undefined>()
+  #entries = new Array<string | Uint8Array>()
   #positions = new Map<string, number>()
   #encodedLength = 0
 
@@ -83,11 +82,11 @@ export class StringTable {
       const byteLength = this.#byteLengths[i]
       offset = encodeTag(buffer, offset, field, kTypeLengthDelim)
       offset = encodeNumber(buffer, offset, byteLength)
-      const decoded = this.#decoded[i]
-      if (decoded !== undefined) {
-        buffer.set(decoded, offset)
+      const entry = this.#entries[i]
+      if (typeof entry !== 'string') {
+        buffer.set(entry, offset)
       } else if (byteLength > 0) {
-        writeUtf8(this.strings[i], offset)
+        writeUtf8(entry, offset, byteLength)
       }
       offset += byteLength
     }
@@ -123,16 +122,18 @@ export class StringTable {
   }
 
   _decodeString(buffer: Uint8Array) {
-    const position = this.#add(decodeString(buffer), buffer.length)
-    this.#decoded[position] = buffer.length <= 64 || typeof Buffer === 'undefined'
+    const bytes = buffer.length <= 64 || typeof Buffer === 'undefined'
       ? new Uint8Array(buffer)
       : Buffer.from(buffer)
+    this.#add(decodeString(bytes), bytes.length, bytes)
   }
 
-  #add(value: string, byteLength: number): number {
-    const position = this.strings.push(value) - 1
+  #add(value: string, byteLength: number, entry: string | Uint8Array = value): number {
+    const position = this.#entries.length
+    this.strings.push(value)
     this.#positions.set(value, position)
     this.#byteLengths.push(byteLength)
+    this.#entries.push(entry)
     this.#encodedLength += varintLength(byteLength) + byteLength
     return position
   }

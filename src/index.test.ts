@@ -482,11 +482,41 @@ test('StringTable', async (t) => {
     assert.strictEqual(bufToHex(encoded), encodeStringTable(table))
   })
 
+  await t.test('encodes inserted strings after sorting the public array', () => {
+    const table = new StringTable()
+    table.dedup('z')
+    table.dedup('alpha')
+    table.strings.sort()
+
+    for (const MessageType of [Profile, ProfilesDictionary]) {
+      const message = new MessageType({ stringTable: table })
+      assert.deepStrictEqual(MessageType.decode(message.encode()).stringTable.strings, ['', 'z', 'alpha'])
+    }
+  })
+
+  await t.test('leaves the output tail unchanged after editing a public string', () => {
+    const table = new StringTable()
+    table.dedup('a')
+    table.strings[1] = 'abcd'
+    const target = new Uint8Array(table.encodedLength + 3).fill(0xaa)
+
+    table.encode(target)
+    assert.strictEqual(bufToHex(target), '3200320161aaaaaa')
+  })
+
   await t.test('re-encodes decoded strings byte for byte', async () => {
     // 0xff is not valid UTF-8, so the decoded string alone can't reproduce it
     const raw = hexToBuf('3200' + '3203' + '61ff62')
     const decoded = Profile.decode(raw).stringTable
     assert.strictEqual(bufToHex(decoded.encode()), bufToHex(raw))
+  })
+
+  await t.test('keeps string indices after truncating the public array', () => {
+    const table = Profile.decode(hexToBuf('32003201ff')).stringTable
+    table.strings.length = 0
+    assert.strictEqual(table.dedup('é'), 2)
+
+    assert.strictEqual(bufToHex(table.encode()), '32003201ff3202c3a9')
   })
 
   await t.test('owns decoded string bytes after the input changes', () => {
