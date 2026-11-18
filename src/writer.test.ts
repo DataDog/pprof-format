@@ -14,9 +14,12 @@ import type { LabelInput, ProfileInput } from './index.js'
 test('writer preserves every profile field and existing samples', () => {
   const strings = new StringTable()
   const name = strings.dedup('cpu 🌍')
+  const samples = strings.dedup('samples')
+  const count = strings.dedup('count')
+  const threadId = strings.dedup('thread id')
   const data: ProfileInput = {
-    sampleType: [{type: name, unit: 0}],
-    sample: [{locationId: [1], value: [2], label: [{key: name, str: name}]}],
+    sampleType: [{type: samples, unit: count}, {type: name, unit: 0}],
+    sample: [{locationId: [1], value: [1, 2], label: [{key: name, str: name}]}],
     mapping: [{id: 1, memoryStart: 128, memoryLimit: 16384, fileOffset: 3, filename: name,
       buildId: name, hasFunctions: true, hasFilenames: true, hasLineNumbers: true, hasInlineFrames: true}],
     location: [{id: 1, mappingId: 1, address: 4096, line: [{functionId: 1, line: 2, column: 3}], isFolded: true}],
@@ -24,27 +27,27 @@ test('writer preserves every profile field and existing samples', () => {
     stringTable: strings,
     dropFrames: name, keepFrames: name, timeNanos: 1700000000000000000n,
     durationNanos: 65000000000n, periodType: {type: name, unit: name}, period: 10000000,
-    comment: [name, 0, name], defaultSampleType: name, docUrl: name,
+    comment: [name, 0, name], defaultSampleType: name, docUrl: strings.dedup('https://example.com/profile'),
   }
   const writer = new ProfileWriter()
   writer.writeSample([1], [123, -456])
   writer.writeLabel(name, name)
-  writer.writeLabel(name, 0, -123n, name)
+  writer.writeLabel(threadId, 0, -123n, name)
   const sample = {locationId: [1], value: [123, -456], label: [{key: name, str: name},
-    {key: name, num: -123n, numUnit: name}]}
+    {key: threadId, num: -123n, numUnit: name}]}
   const expected = new Profile({...data, sample: [...data.sample!, sample]}).encode()
   const actual = writer.encode(data)
   assert.deepEqual(actual, expected)
   const decoded = proto.perftools.profiles.Profile.toObject(proto.perftools.profiles.Profile.decode(actual),
     {longs: String})
   assert.deepEqual(decoded.sample[1], {locationId: ['1'], value: ['123', '-456'],
-    label: [{key: String(name), str: String(name)}, {key: String(name), num: '-123', numUnit: String(name)}]})
+    label: [{key: String(name), str: String(name)}, {key: String(threadId), num: '-123', numUnit: String(name)}]})
   assert.deepEqual(writer.encode(data), expected)
   const profile = new Profile(data)
   assert.deepEqual(writer.encode(profile), expected)
   assert.equal(profile.sample.length, 1)
   assert.equal(data.sample!.length, 1)
-  assert.equal(data.sampleType!.length, 1)
+  assert.equal(data.sampleType!.length, 2)
 })
 
 test('writer preserves numeric defaults and 64-bit encodings', () => {
@@ -59,6 +62,28 @@ test('writer preserves numeric defaults and 64-bit encodings', () => {
       label: [{key: value, str: value, num: value, numUnit: value}]}]})
     assert.deepEqual(writer.encode(), profile.encode(), String(value))
   }
+})
+
+test('writer normalizes plain records added to a Profile', () => {
+  const data = Object.assign(new Profile(), {sample: [{locationId: [1], value: [2]}]})
+  const writer = new ProfileWriter()
+  assert.deepEqual(writer.encode(data), new Profile(data).encode())
+})
+
+test('writer takes its sample snapshot before reading metadata', () => {
+  const writer = new ProfileWriter()
+  writer.writeSample([1], [2])
+  const data = {
+    get location() {
+      writer.writeSample([1], [3])
+      return [{id: 1}]
+    },
+  }
+  const first = writer.encode(data)
+  assert.deepEqual(first, new Profile({location: [{id: 1}], sample: [{locationId: [1], value: [2]}]}).encode())
+  assert.deepEqual(writer.encode({location: [{id: 1}]}), new Profile({location: [{id: 1}], sample: [
+    {locationId: [1], value: [2]}, {locationId: [1], value: [3]},
+  ]}).encode())
 })
 
 test('writer preserves empty profiles, samples, and labels', () => {
@@ -147,24 +172,29 @@ test('labels require an open sample', () => {
   assert.throws(() => writer.writeLabel(1, 2), {message: 'writeLabel() requires an open sample'})
 })
 
-test('writer supports supplied buffers and retrying a small buffer', () => {
-  const writer = new ProfileWriter()
-  writer.writeSample([1], [2])
-  const expected = writer.encode()
-  assert.throws(() => writer.encode({}, new Uint8Array(expected.length - 1)), {name: 'RangeError'})
-  const exact = new Uint8Array(expected.length)
-  assert.equal(writer.encode({}, exact), exact)
-  assert.deepEqual(exact, expected)
-  const buffer = new Uint8Array(expected.length + 8).fill(0xa5)
-  assert.equal(writer.encode({}, buffer), buffer)
-  assert.deepEqual(buffer.subarray(0, expected.length), expected)
-  assert.deepEqual(buffer.subarray(expected.length), new Uint8Array(8).fill(0xa5))
-})
-
-test('writer rejects array mutation between measuring and encoding', () => {
-  let reads = 0
-  const value = [1]
-  value[Symbol.iterator] = () => (++reads === 1 ? [1] : [128])[Symbol.iterator]()
-  assert.throws(() => new ProfileWriter().writeSample([], value),
-    {message: 'Encoded 4 bytes but measured 3'})
-})
+for (const failure of ['length mismatch', 'measurement read error', 'encoding read error'] as const) {
+  test(`writer omits a rejected sample after a ${failure}`, () => {
+    const writer = new ProfileWriter()
+    writer.writeSample([1], [2])
+    let reads = 0
+    const value = [1]
+    Object.defineProperty(value, 0, {
+      get() {
+        if (++reads === 1) {
+          if (failure === 'measurement read error') throw new Error(failure)
+          return 1
+        }
+        if (failure === 'encoding read error') throw new Error(failure)
+        return 128
+      },
+    })
+    const message = failure === 'length mismatch' ? 'Encoded 4 bytes but measured 3' : failure
+    assert.throws(() => writer.writeSample([], value), {message})
+    assert.throws(() => writer.writeLabel(1, 2), {message: 'writeLabel() requires an open sample'})
+    assert.deepEqual(writer.encode(), new Profile({sample: [{locationId: [1], value: [2]}]}).encode())
+    writer.writeSample([3], [4])
+    assert.deepEqual(writer.encode(), new Profile({sample: [
+      {locationId: [1], value: [2]}, {locationId: [3], value: [4]},
+    ]}).encode())
+  })
+}

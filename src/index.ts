@@ -825,10 +825,12 @@ export class ProfileWriter {
     context.cursor = 0
     const length = measureSampleStackAndValues(locationId, value, context)
     reserveWriterBuffer(state, state.offset + 2 + length)
-    let offset = encodeTag(state.buffer, state.offset, ProfileField.sample, kTypeLengthDelim)
-    state.sampleStart = offset++
-    state.offset = encodeSampleStackAndValues(state.buffer, offset, locationId, value, context)
-    verifyEncodedLength(state.offset - offset, length)
+    const start = encodeTag(state.buffer, state.offset, ProfileField.sample, kTypeLengthDelim)
+    const offset = start + 1
+    const end = encodeSampleStackAndValues(state.buffer, offset, locationId, value, context)
+    verifyEncodedLength(end - offset, length)
+    state.sampleStart = start
+    state.offset = end
   }
 
   /** Adds an indexed label to the current sample; requires a preceding writeSample(). */
@@ -847,14 +849,14 @@ export class ProfileWriter {
   }
 
   /** Closes the current sample. Samples in data precede the writer's samples. */
-  encode(data: ProfileInput = {}, buffer?: Uint8Array): Uint8Array {
+  encode(data: ProfileInput = {}): Uint8Array {
     const state = this.#state
     finishWriterSample(state)
-    const profile = data instanceof Profile ? data : new Profile(data)
-    const context = newEncodeContext()
-    const length = profile._measure(context) + state.offset
-    const target = prepareBuffer(buffer, length)
     const samples = state.buffer.subarray(0, state.offset)
+    const profile = new Profile(data)
+    const context = newEncodeContext()
+    const length = profile._measure(context) + samples.length
+    const target = new Uint8Array(length)
     verifyEncodedLength(encodeProfile(profile, target, 0, context, samples), length)
     return target
   }

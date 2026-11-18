@@ -128,14 +128,16 @@ const bytes = writer.encode({
 })
 ```
 
-`writeSample(locationId, value)` consumes both arrays immediately. Subsequent
-`writeLabel(key, str = 0, num = 0, numUnit = 0)` calls add labels to that sample.
-Label keys, strings, and units are string-table indices, as with `Label`.
+`writeSample(locationId, value)` closes the previous sample and consumes both
+arrays immediately. It does not append a partial sample if the call throws.
+Do not change the arrays or call other writer methods during the call.
+`writeLabel(key, str = 0, num = 0, numUnit = 0)` adds a label to the open
+sample. Label keys, strings, and units are string-table indices, as with `Label`.
 
-`encode(data = {}, buffer?)` accepts the same metadata and destination buffer as
-`Profile`. Any samples in `data` precede the written samples. Encoding closes the
-current sample, so another label requires a new `writeSample` call. You can encode
-again or append more samples. Each allocated result owns its bytes. The writer
+`encode(data = {})` accepts the same input as `new Profile(data)`. Any samples in
+`data` precede the written samples. Encoding closes the current sample and takes
+the sample snapshot before reading `data`. You can encode again or append more
+samples. Each result is a new `Uint8Array` of the exact encoded length. The writer
 retains its encoded samples until you release it.
 
 ## OpenTelemetry profiles

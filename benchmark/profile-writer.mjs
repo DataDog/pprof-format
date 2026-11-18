@@ -6,18 +6,20 @@ const codec = await import(process.env.CODEC ?? '../dist/esm/index.js')
 const { Label, Profile, ProfileWriter, Sample, StringTable } = codec
 const name = process.argv[2] ?? 'writer'
 const count = Number(process.env.SAMPLES ?? 6500)
+const deep = process.env.STACKS === 'deep'
+const firstLocation = deep ? 129 : 1
 const samples = Array.from({ length: count },
   /**
    * @param {undefined} value
    * @param {number} index
    */
   (value, index) => ({
-    stack: Array.from({ length: 4 + index % 29 },
+    stack: Array.from({ length: deep ? 64 + index % 65 : 4 + index % 29 },
       /**
        * @param {undefined} value
        * @param {number} frame
        */
-      (value, frame) => frame + 1),
+      (value, frame) => frame + firstLocation),
     value: [1, 10000000],
     labels: [[1, 2, 0, 0], [3, 0, index % 8, 0], [4, 0, 4294967296 + index, 0],
       [5, 0, 9223372036854775807n - BigInt(index), 0]],
@@ -29,25 +31,25 @@ function metadata() {
     'nanoseconds', 'main.js']) {
     strings.dedup(value)
   }
-  return new Profile({
+  return {
     sampleType: [{ type: 6, unit: 7 }, { type: 8, unit: 9 }],
     function: [{ id: 1, name: 2, filename: 10 }],
-    location: Array.from({ length: 32 },
+    location: Array.from({ length: deep ? 128 : 32 },
       /**
        * @param {undefined} value
        * @param {number} index
        */
-      (value, index) => ({ id: index + 1, line: [{ functionId: 1, line: index }] })),
+      (value, index) => ({ id: index + firstLocation, line: [{ functionId: 1, line: index }] })),
     stringTable: strings,
     timeNanos: 1700000000000000000n,
     durationNanos: 65000000000,
     periodType: { type: 8, unit: 9 },
     period: 10000000,
-  })
+  }
 }
 
 function objects() {
-  const profile = metadata()
+  const profile = new Profile(metadata())
   for (const sample of samples) {
     const label = []
     for (const [key, str, num, numUnit] of sample.labels) {
@@ -59,7 +61,7 @@ function objects() {
 }
 
 function direct() {
-  const profile = metadata()
+  const data = metadata()
   const writer = new ProfileWriter()
   for (const sample of samples) {
     writer.writeSample(sample.stack, sample.value)
@@ -67,7 +69,7 @@ function direct() {
       writer.writeLabel(key, str, num, numUnit)
     }
   }
-  return writer.encode(profile)
+  return writer.encode(data)
 }
 
 const operation = name === 'baseline' ? objects : direct
@@ -85,4 +87,5 @@ for (let round = 0; round < 100; round++) {
 const meanMs = (performance.now() - start) / 100
 const usage = process.cpuUsage(cpu)
 process.stdout.write(JSON.stringify({ name, node: process.version, v8: process.versions.v8, samples: count,
-  meanMs, cpuMs: (usage.user + usage.system) / 100000, bytes: expected.length, checksum, wireEquality: true }) + '\n')
+  stacks: deep ? 'deep' : 'shallow', meanMs, cpuMs: (usage.user + usage.system) / 100000, bytes: expected.length,
+  checksum, wireEquality: true }) + '\n')
