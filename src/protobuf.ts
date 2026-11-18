@@ -359,7 +359,7 @@ export function encodeBoolField(buffer: Uint8Array, offset: number, field: numbe
   return offset
 }
 
-function measurePackedNumbers(values: Numeric[]): number {
+function measurePackedNumbers(values: readonly Numeric[]): number {
   let total = 0
   for (const value of values) {
     // Arrays should always include zeros to keep positions consistent
@@ -368,7 +368,7 @@ function measurePackedNumbers(values: Numeric[]): number {
   return total
 }
 
-export function measurePackedNumbersField(field: number, values: Numeric[], context: EncodeContext): number {
+export function measurePackedNumbersField(field: number, values: readonly Numeric[], context: EncodeContext): number {
   // Packed arrays are encoded as Tag,Len,ConcatenatedElements
   const total = measurePackedNumbers(values)
   if (!total) {
@@ -378,7 +378,7 @@ export function measurePackedNumbersField(field: number, values: Numeric[], cont
   return measureTag(field) + measureNumber(total) + total
 }
 
-export function encodePackedNumbersField(buffer: Uint8Array, offset: number, field: number, values: Numeric[], context: EncodeContext): number {
+export function encodePackedNumbersField(buffer: Uint8Array, offset: number, field: number, values: readonly Numeric[], context: EncodeContext): number {
   if (!values.length) {
     return offset
   }

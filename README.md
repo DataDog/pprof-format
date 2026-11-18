@@ -105,6 +105,41 @@ const copied = Profile.decode(profile.encode())
 console.log(copied)
 ```
 
+## Writing samples directly
+
+Use `ProfileWriter` when samples arrive incrementally and you only need encoded
+bytes. It avoids constructing and retaining `Sample` and `Label` objects.
+
+```js
+import { ProfileWriter, StringTable } from 'pprof-format'
+
+const strings = new StringTable()
+const writer = new ProfileWriter()
+
+writer.writeSample([1], [123, 456])
+writer.writeLabel(strings.dedup('thread name'), strings.dedup('main'))
+writer.writeLabel(strings.dedup('thread id'), 0, 1)
+
+const bytes = writer.encode({
+  sampleType: [{ type: strings.dedup('samples'), unit: strings.dedup('count') },
+    { type: strings.dedup('cpu'), unit: strings.dedup('nanoseconds') }],
+  location: [{ id: 1 }],
+  stringTable: strings
+})
+```
+
+`writeSample(locationId, value)` closes the previous sample and consumes both
+arrays immediately. It does not append a partial sample if the call throws.
+Do not change the arrays or call other writer methods during the call.
+`writeLabel(key, str = 0, num = 0, numUnit = 0)` adds a label to the open
+sample. Label keys, strings, and units are string-table indices, as with `Label`.
+
+`encode(data = {})` accepts the same input as `new Profile(data)`. Any samples in
+`data` precede the written samples. Encoding closes the current sample and takes
+the sample snapshot before reading `data`. You can encode again or append more
+samples. Each result is a new `Uint8Array` of the exact encoded length. The writer
+retains its encoded samples until you release it.
+
 ## OpenTelemetry profiles
 
 The `pprof-format/otel` entry point encodes and decodes the OpenTelemetry

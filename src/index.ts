@@ -14,11 +14,14 @@ import {
   encodeBoolField,
   encodeMessageArrayField,
   encodeMessageField,
+  encodeNumber,
   encodeNumberField,
   encodePackedNumbersField,
+  encodeTag,
   isLengthDelim,
   isPackedOrVarInt,
   isVarInt,
+  kTypeLengthDelim,
   measureBoolField,
   measureMessageArrayField,
   measureMessageField,
@@ -28,6 +31,7 @@ import {
   prepareBuffer,
   push,
   pushAll,
+  varintLength,
   verifyEncodedLength,
   yieldToEventLoop,
 } from './protobuf.js'
@@ -193,11 +197,7 @@ export class Label extends Message {
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
-    offset = encodeNumberField(buffer, offset, LabelField.key, this.key)
-    offset = encodeNumberField(buffer, offset, LabelField.str, this.str)
-    offset = encodeNumberField(buffer, offset, LabelField.num, this.num)
-    offset = encodeNumberField(buffer, offset, LabelField.numUnit, this.numUnit)
-    return offset
+    return encodeLabel(buffer, offset, this.key, this.str, this.num, this.numUnit)
   }
 
   static decodeValue(data: LabelInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
@@ -245,16 +245,13 @@ export class Sample extends Message {
   }
 
   _measure(context: EncodeContext) {
-    let total = 0
-    total += measurePackedNumbersField(SampleField.locationId, this.locationId, context)
-    total += measurePackedNumbersField(SampleField.value, this.value, context)
+    let total = measureSampleStackAndValues(this.locationId, this.value, context)
     total += measureMessageArrayField(SampleField.label, this.label, context)
     return total
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
-    offset = encodePackedNumbersField(buffer, offset, SampleField.locationId, this.locationId, context)
-    offset = encodePackedNumbersField(buffer, offset, SampleField.value, this.value, context)
+    offset = encodeSampleStackAndValues(buffer, offset, this.locationId, this.value, context)
     offset = encodeMessageArrayField(buffer, offset, SampleField.label, this.label, context)
     return offset
   }
@@ -698,14 +695,7 @@ export class Profile extends Message {
   }
 
   _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
-    offset = this._encodeSampleTypesToBuffer(buffer, offset, context)
-    offset = this._encodeSamplesToBuffer(buffer, offset, context)
-    offset = this._encodeMappingsToBuffer(buffer, offset, context)
-    offset = this._encodeLocationsToBuffer(buffer, offset, context)
-    offset = this._encodeFunctionsToBuffer(buffer, offset, context)
-    offset = this.stringTable._encodeToBuffer(buffer, offset, ProfileField.stringTable)
-    offset = this._encodeBasicValuesToBuffer(buffer, offset, context)
-    return offset
+    return encodeProfile(this, buffer, offset, context)
   }
 
   /** Like _encodeToBuffer(), but yields between phases. */
@@ -807,4 +797,129 @@ export class Profile extends Message {
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Profile {
     return new this(decodeFields(buffer, this.decodeValue, start, end))
   }
+}
+
+type WriterState = {
+  buffer: Uint8Array
+  offset: number
+  sampleStart: number
+  context: EncodeContext
+}
+
+/** Encodes samples as they arrive, without retaining sample or label objects. */
+export class ProfileWriter {
+  // One private field avoids repeated WeakMap lookups in the ES2020 build.
+  #state: WriterState = {
+    buffer: new Uint8Array(0),
+    offset: 0,
+    sampleStart: -1,
+    context: newEncodeContext(),
+  }
+
+  /** Starts a sample and copies its stack and values into the writer. */
+  writeSample(locationId: readonly Numeric[], value: readonly Numeric[]): void {
+    const state = this.#state
+    finishWriterSample(state)
+    const context = state.context
+    context.lengths.length = 0
+    context.cursor = 0
+    const length = measureSampleStackAndValues(locationId, value, context)
+    reserveWriterBuffer(state, state.offset + 2 + length)
+    const start = encodeTag(state.buffer, state.offset, ProfileField.sample, kTypeLengthDelim)
+    const offset = start + 1
+    const end = encodeSampleStackAndValues(state.buffer, offset, locationId, value, context)
+    verifyEncodedLength(end - offset, length)
+    state.sampleStart = start
+    state.offset = end
+  }
+
+  /** Adds an indexed label to the current sample; requires a preceding writeSample(). */
+  writeLabel(key: Numeric = 0, str: Numeric = 0, num: Numeric = 0, numUnit: Numeric = 0): void {
+    const state = this.#state
+    if (state.sampleStart < 0) {
+      throw new Error('writeLabel() requires an open sample')
+    }
+    // Four scalar fields need at most 44 bytes, plus the label's tag and length.
+    reserveWriterBuffer(state, state.offset + 46)
+    let offset = encodeTag(state.buffer, state.offset, SampleField.label, kTypeLengthDelim)
+    const prefix = offset++
+    offset = encodeLabel(state.buffer, offset, key, str, num, numUnit)
+    state.buffer[prefix] = offset - prefix - 1
+    state.offset = offset
+  }
+
+  /** Closes the current sample. Samples in data precede the writer's samples. */
+  encode(data: ProfileInput = {}): Uint8Array {
+    const state = this.#state
+    finishWriterSample(state)
+    const samples = state.buffer.subarray(0, state.offset)
+    const profile = new Profile(data)
+    const context = newEncodeContext()
+    const length = profile._measure(context) + samples.length
+    const target = new Uint8Array(length)
+    verifyEncodedLength(encodeProfile(profile, target, 0, context, samples), length)
+    return target
+  }
+}
+
+function reserveWriterBuffer(state: WriterState, length: number): void {
+  if (length > state.buffer.length) {
+    const buffer = new Uint8Array(Math.max(1024, length, state.buffer.length * 2))
+    buffer.set(state.buffer)
+    state.buffer = buffer
+  }
+}
+
+function finishWriterSample(state: WriterState): void {
+  if (state.sampleStart >= 0) {
+    const start = state.sampleStart
+    const length = state.offset - start - 1
+    const extra = varintLength(length) - 1
+    if (extra > 0) {
+      reserveWriterBuffer(state, state.offset + extra)
+      state.buffer.copyWithin(start + 1 + extra, start + 1, state.offset)
+      state.offset += extra
+    }
+    encodeNumber(state.buffer, start, length)
+    state.sampleStart = -1
+  }
+}
+
+function encodeLabel(
+  buffer: Uint8Array, offset: number, key: Numeric, str: Numeric, num: Numeric, numUnit: Numeric,
+): number {
+  offset = encodeNumberField(buffer, offset, LabelField.key, key)
+  offset = encodeNumberField(buffer, offset, LabelField.str, str)
+  offset = encodeNumberField(buffer, offset, LabelField.num, num)
+  return encodeNumberField(buffer, offset, LabelField.numUnit, numUnit)
+}
+
+function measureSampleStackAndValues(
+  locationId: readonly Numeric[], value: readonly Numeric[], context: EncodeContext,
+): number {
+  return measurePackedNumbersField(SampleField.locationId, locationId, context) +
+    measurePackedNumbersField(SampleField.value, value, context)
+}
+
+function encodeSampleStackAndValues(
+  buffer: Uint8Array, offset: number, locationId: readonly Numeric[], value: readonly Numeric[], context: EncodeContext,
+): number {
+  offset = encodePackedNumbersField(buffer, offset, SampleField.locationId, locationId, context)
+  return encodePackedNumbersField(buffer, offset, SampleField.value, value, context)
+}
+
+function encodeProfile(
+  profile: Profile, buffer: Uint8Array, offset: number, context: EncodeContext, samples?: Uint8Array,
+): number {
+  offset = profile._encodeSampleTypesToBuffer(buffer, offset, context)
+  offset = profile._encodeSamplesToBuffer(buffer, offset, context)
+  if (samples !== undefined) {
+    buffer.set(samples, offset)
+    offset += samples.length
+  }
+  offset = profile._encodeMappingsToBuffer(buffer, offset, context)
+  offset = profile._encodeLocationsToBuffer(buffer, offset, context)
+  offset = profile._encodeFunctionsToBuffer(buffer, offset, context)
+  offset = profile.stringTable._encodeToBuffer(buffer, offset, ProfileField.stringTable)
+  return profile._encodeBasicValuesToBuffer(buffer, offset, context)
 }

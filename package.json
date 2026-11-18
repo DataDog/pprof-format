@@ -48,7 +48,7 @@
     "lint": "eslint src",
     "prepublishOnly": "npm run build",
     "pretest": "npm run build && npm run build:test",
-    "test": "node --test dist-test/index.test.js dist-test/protobuf.test.js dist-test/otel.test.js",
+    "test": "node --test dist-test/index.test.js dist-test/protobuf.test.js dist-test/otel.test.js dist-test/writer.test.js",
     "proto": "mkdir -p proto && pbjs -t static-module -w commonjs -o testing/proto/profile.js testing/proto/profile.proto && pbts -o testing/proto/profile.d.ts testing/proto/profile.js",
     "proto:otel": "cd testing/otel-proto && pbjs -t static-module -w commonjs -p . -o otel.js opentelemetry/proto/collector/profiles/v1development/profiles_service.proto && pbts -o otel.d.ts otel.js"
   },
