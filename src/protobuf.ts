@@ -446,19 +446,20 @@ export function encodeBytesField(buffer: Uint8Array, offset: number, field: numb
 
 /** UTF-8 byte length; lone surrogates become U+FFFD (3 bytes), as in TextEncoder. */
 export function utf8Length(string: string): number {
-  let length = 0
+  let length = string.length
   for (let i = 0; i < string.length; i++) {
     const code = string.charCodeAt(i)
     if (code < 0x80) {
+      continue
+    }
+    if (code < 0x800) {
       length += 1
-    } else if (code < 0x800) {
+    } else if (code >= 0xd800 && code <= 0xdbff && i + 1 < string.length &&
+      (string.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
       length += 2
-    } else if ((code & 0xfc00) === 0xd800 && (string.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
-      // A surrogate pair encodes one code point in 4 bytes
-      length += 4
       i++
     } else {
-      length += 3
+      length += 2
     }
   }
   return length

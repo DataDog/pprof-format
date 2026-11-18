@@ -7,10 +7,14 @@
 import { test } from 'node:test'
 import type { TestContext } from 'node:test'
 import assert from 'node:assert'
+import { Buffer as NodeBuffer } from 'node:buffer'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'zlib'
 import * as fs from 'fs'
 
 import proto from '../testing/proto/profile.js'
+import { ProfilesDictionary } from './otel.js'
 
 const {decode, toObject} = proto.perftools.profiles.Profile
 
@@ -465,6 +469,71 @@ test('StringTable', async (t) => {
     assert.strictEqual(bufToHex(table.encode()), encodings[''])
     table.dedup('hello')
     assert.strictEqual(bufToHex(table.encode()), encodings[''] + encodings['hello'])
+  })
+
+  await t.test('encodes non-ASCII strings as TextEncoder does', async () => {
+    const strings = ['é', '日本語', '😀 emoji', 'lone \uD800 high', 'lone \uDC00 low', 'x'.repeat(200) + 'ü']
+    const table = new StringTable()
+    for (const value of strings) {
+      table.dedup(value)
+    }
+    const encoded = table.encode()
+    assert.strictEqual(encoded.length, table.encodedLength)
+    assert.strictEqual(bufToHex(encoded), encodeStringTable(table))
+  })
+
+  await t.test('re-encodes decoded strings byte for byte', async () => {
+    // 0xff is not valid UTF-8, so the decoded string alone can't reproduce it
+    const raw = hexToBuf('3200' + '3203' + '61ff62')
+    const decoded = Profile.decode(raw).stringTable
+    assert.strictEqual(bufToHex(decoded.encode()), bufToHex(raw))
+  })
+
+  await t.test('owns decoded string bytes after the input changes', () => {
+    for (const ArrayType of [Uint8Array, NodeBuffer]) {
+      for (const length of [0, 1, 64, 65]) {
+        const bytes = new Uint8Array(length).fill(0xff)
+        const expected = Uint8Array.of(0x32, 0, 0x32, length, ...bytes)
+        for (const [MessageType, field] of [[Profile, 0x32], [ProfilesDictionary, 0x2a]] as const) {
+          const input = ArrayType.from([0xaa, field, 0, field, length, ...bytes, 0xaa])
+          const decoded = MessageType.decode(input.subarray(1, -1))
+          input.fill(0)
+          assert.deepStrictEqual(decoded.stringTable.encode(), expected, `${ArrayType.name}, ${length} bytes`)
+        }
+      }
+    }
+  })
+
+  await t.test('checks the capacity of supplied buffers', () => {
+    for (const value of ['', 'hello', 'é日本😀\uD800', 'x'.repeat(127), 'x'.repeat(128)]) {
+      const table = new StringTable()
+      table.dedup(value)
+      const expected = encodeStringTable(table)
+      for (const ArrayType of [Uint8Array, NodeBuffer]) {
+        for (const length of [0, table.encodedLength - 1]) {
+          assert.throws(() => table.encode(new ArrayType(length)), { name: 'RangeError' })
+        }
+        for (const extra of [0, 1]) {
+          const backing = new ArrayType(table.encodedLength + extra + 2).fill(0xaa)
+          const target = backing.subarray(1, -1)
+          assert.strictEqual(table.encode(target), target)
+          assert.strictEqual(bufToHex(target.subarray(0, table.encodedLength)), expected)
+          assert.strictEqual(backing[0], 0xaa)
+          assert.strictEqual(backing[backing.length - 1], 0xaa)
+          if (extra) {
+            assert.strictEqual(target[table.encodedLength], 0xaa)
+          }
+        }
+      }
+    }
+  })
+
+  await t.test('works without the Buffer global', { skip: typeof globalThis.Buffer === 'undefined' }, () => {
+    const result = spawnSync(process.execPath, [
+      '--import', 'data:text/javascript,globalThis.Buffer=undefined',
+      '--test', '--test-name-pattern=StringTable', fileURLToPath(import.meta.url),
+    ], { encoding: 'utf8', env: { ...process.env, NODE_TEST_CONTEXT: undefined } })
+    assert.strictEqual(result.status, 0, result.stderr || result.stdout)
   })
 })
 
