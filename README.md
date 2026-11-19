@@ -105,6 +105,9 @@ const copied = Profile.decode(profile.encode())
 console.log(copied)
 ```
 
+The pprof decoder returns negative `int64` values as negative `bigint` values.
+It does not change the representation of unsigned fields or positive values.
+
 ## OpenTelemetry profiles
 
 The `pprof-format/otel` entry point encodes and decodes the OpenTelemetry

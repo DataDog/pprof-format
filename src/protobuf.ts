@@ -111,13 +111,27 @@ export function decodeNumber(buffer: Uint8Array, start = 0, end = buffer.length)
 }
 
 export function decodeNumbers(buffer: Uint8Array, from = 0, to = buffer.length): Array<Numeric> {
+  return decodeVarints(buffer, from, to, false)
+}
+
+export function decodeInt64(buffer: Uint8Array, start: number, end: number): Numeric {
+  if (end - start > 4) return toSigned(decodeBigNumber(buffer, start))
+  return decodeSmallNumber(buffer, start, end)
+}
+
+export function decodeInt64s(buffer: Uint8Array, from: number, to: number): Numeric[] {
+  return decodeVarints(buffer, from, to, true)
+}
+
+function decodeVarints(buffer: Uint8Array, from: number, to: number, signed: boolean): Numeric[] {
   const values = []
   let start = from
 
   for (let i = from; i < to; i++) {
     if ((buffer[i] & 0b10000000) === 0) {
       if (i - start >= 4) {
-        values.push(decodeBigNumber(buffer, start))
+        const value = decodeBigNumber(buffer, start)
+        values.push(signed ? toSigned(value) : value)
       } else {
         values.push(decodeSmallNumber(buffer, start, i + 1))
       }
@@ -132,11 +146,11 @@ const twoTo63 = 2n ** 63n
 const twoTo64 = 2n ** 64n
 
 /**
- * Interprets an unsigned varint as int64 or int32. Negative values use 10 bytes
+ * Interprets an unsigned varint as int64. Negative values use 10 bytes
  * and decode as bigints >= 2^63.
  */
-export function toSigned(number: Numeric): Numeric {
-  return typeof number === 'bigint' && number >= twoTo63 ? number - twoTo64 : number
+function toSigned(number: bigint): bigint {
+  return number >= twoTo63 ? number - twoTo64 : number
 }
 
 /** Decodes a little-endian uint64 as a number if safe, or a bigint otherwise. */

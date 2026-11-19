@@ -556,6 +556,43 @@ test('Protobufjs compat', async (t) => {
   })
 })
 
+test('decodes signed pprof integers without changing unsigned fields', () => {
+  const negativeLimit = -(2n ** 63n)
+  const positiveLimit = 2n ** 63n - 1n
+  const unsignedLimit = 2n ** 64n - 1n
+  const timeNanos = 1_700_000_000_000_000_001n
+  const stringTable = new StringTable()
+  const dropFrames = stringTable.dedup('internal')
+  const keepFrames = stringTable.dedup('application')
+  const value = [negativeLimit, -1n, 0, 2 ** 28 - 1, 2n ** 28n, positiveLimit]
+  const profile = new Profile({
+    sample: [{ value, locationId: [unsignedLimit], label: [{ num: -1 }] }],
+    location: [{ id: unsignedLimit, address: unsignedLimit, line: [{ line: -2 }] }],
+    timeNanos,
+    stringTable,
+    dropFrames,
+    keepFrames,
+  })
+  const decoded = Profile.decode(profile.encode())
+  assert.deepStrictEqual(decoded.sample[0].value, value)
+  assert.deepStrictEqual(decoded.sample[0].locationId, [unsignedLimit])
+  assert.strictEqual(decoded.sample[0].label[0].num, -1n)
+  assert.strictEqual(decoded.location[0].address, unsignedLimit)
+  assert.strictEqual(decoded.location[0].line[0].line, -2n)
+  assert.strictEqual(decoded.timeNanos, timeNanos)
+  assert.strictEqual(decoded.dropFrames, dropFrames)
+  assert.strictEqual(decoded.keepFrames, keepFrames)
+  assert.strictEqual(Profile.decode(new Profile({ timeNanos: negativeLimit }).encode()).timeNanos, negativeLimit)
+  assert.deepStrictEqual(decoded.encode(), profile.encode())
+})
+
+test('decodes signed values in both packed and unpacked sample fields', () => {
+  const packed = new Sample({ value: [-1] }).encode()
+  const unpacked = hexToBuf('10ffffffffffffffffff01')
+  const mixed = Uint8Array.from([0x10, 1, ...packed, ...unpacked, 0x10, 2])
+  assert.deepStrictEqual(Sample.decode(mixed).value, [1, -1n, -1n, 2])
+})
+
 test('non-packed repeated fields', async (t: TestContext) => {
   // Go's runtime/pprof encodes Sample.value as non-packed repeated int64 (one
   // field occurrence per value). The decoder must append rather than overwrite

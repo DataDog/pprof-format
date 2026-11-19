@@ -22,6 +22,8 @@ import {
   decodeFields,
   decodeFixed64,
   decodeFixed64s,
+  decodeInt64,
+  decodeInt64s,
   decodeNumber,
   decodeNumbers,
   decodeString,
@@ -56,7 +58,6 @@ import {
   prepareBuffer,
   push,
   pushAll,
-  toSigned,
   verifyEncodedLength,
   yieldToEventLoop,
 } from './protobuf.js'
@@ -96,14 +97,6 @@ function decodeInt32s(buffer: Uint8Array, start: number, end: number): number[] 
 
 function decodeUint32(buffer: Uint8Array, start: number, end: number): number {
   return toUint32(decodeNumber(buffer, start, end))
-}
-
-function decodeInt64(buffer: Uint8Array, start: number, end: number): Numeric {
-  return toSigned(decodeNumber(buffer, start, end))
-}
-
-function decodeInt64s(buffer: Uint8Array, start: number, end: number): Numeric[] {
-  return decodeNumbers(buffer, start, end).map(toSigned)
 }
 
 // Copy into a plain Uint8Array so decoded messages don't retain the input.
