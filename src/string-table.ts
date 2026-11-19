@@ -114,7 +114,7 @@ export class StringTable {
   }
 
   dedup(value: string): number {
-    if (typeof value === 'number') return value
+    if (typeof value !== 'string') throw new TypeError('StringTable.dedup expects a string')
     let position = this.#positions.get(value)
     if (position === undefined) {
       position = this.#add(value, utf8ByteLength(value))

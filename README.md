@@ -13,6 +13,9 @@ npm install pprof-format
 
 ## Usage
 
+Pass only strings to `StringTable.dedup()`. If you already have a string table
+index, use that index directly.
+
 ```js
 import {
   Function,
