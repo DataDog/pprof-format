@@ -164,3 +164,7 @@ const body = request.encode()
 // Decode from Uint8Array
 const copied = ExportProfilesServiceRequest.decode(body)
 ```
+
+Use `encode()` and `decode()` for message bytes. If you supply an output
+buffer, pass it to `encode(buffer)`. The field-level decode and buffer-writing
+helpers are not part of the public API.

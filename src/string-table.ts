@@ -8,29 +8,22 @@ import {
   decodeString,
   encodeNumber,
   encodeTag,
+  kEncodeToBuffer,
+  kMeasure,
   kTypeLengthDelim,
   measureTag,
   prepareBuffer,
-  toUtf8,
   utf8Length,
   varintLength,
 } from './protobuf.js'
 
 export const emptyTableToken = Symbol()
+export const kDecodeString = Symbol()
 
 // pprof's Profile.string_table, which the table's own encode() produces
 const pprofStringTableField = 6
 
 // A string's length prefix and UTF-8 bytes, which don't depend on the field
-function encodeLengthDelimited(utf8: Uint8Array | Buffer): Uint8Array {
-  const buffer = new Uint8Array(varintLength(utf8.length) + utf8.length)
-  const offset = encodeNumber(buffer, 0, utf8.length)
-  if (utf8.length > 0) {
-    buffer.set(utf8, offset)
-  }
-  return buffer
-}
-
 const utf8ByteLength = typeof Buffer === 'undefined'
   ? utf8Length
   : (value: string) => Buffer.byteLength(value, 'utf8')
@@ -68,16 +61,18 @@ export class StringTable {
 
   /** The encoded length of the strings as pprof's string_table. */
   get encodedLength(): number {
-    return this._measure(pprofStringTableField)
+    return this[kMeasure](pprofStringTableField)
   }
 
   /** Measures the strings as the repeated string field `field`. */
-  _measure(field: number): number {
+  /** @internal */
+  [kMeasure](field: number): number {
     return this.#byteLengths.length * measureTag(field) + this.#encodedLength
   }
 
   /** Encodes the strings as the repeated string field `field`. */
-  _encodeToBuffer(buffer: Uint8Array, offset: number, field: number): number {
+  /** @internal */
+  [kEncodeToBuffer](buffer: Uint8Array, offset: number, field: number): number {
     const writeUtf8 = utf8Writer(buffer)
     for (let i = 0; i < this.#byteLengths.length; i++) {
       const byteLength = this.#byteLengths[i]
@@ -97,20 +92,8 @@ export class StringTable {
   /** Encodes the strings as pprof's string_table. */
   encode(buffer?: Uint8Array): Uint8Array {
     buffer = prepareBuffer(buffer, this.encodedLength)
-    this._encodeToBuffer(buffer, 0, pprofStringTableField)
+    this[kEncodeToBuffer](buffer, 0, pprofStringTableField)
     return buffer
-  }
-
-  /** Encodes one pprof string_table entry, including its tag and length. */
-  static _encodeStringFromUtf8(stringBuffer: Uint8Array | Buffer): Uint8Array {
-    const entry = encodeLengthDelimited(stringBuffer)
-    const buffer = new Uint8Array(measureTag(pprofStringTableField) + entry.length)
-    buffer.set(entry, encodeTag(buffer, 0, pprofStringTableField, kTypeLengthDelim))
-    return buffer
-  }
-
-  static _encodeString(string: string): Uint8Array {
-    return StringTable._encodeStringFromUtf8(toUtf8(string))
   }
 
   dedup(value: string): number {
@@ -122,7 +105,8 @@ export class StringTable {
     return position
   }
 
-  _decodeString(buffer: Uint8Array) {
+  /** @internal */
+  [kDecodeString](buffer: Uint8Array) {
     const position = this.#add(decodeString(buffer), buffer.length)
     this.#decoded[position] = buffer.length <= 64 || typeof Buffer === 'undefined'
       ? new Uint8Array(buffer)

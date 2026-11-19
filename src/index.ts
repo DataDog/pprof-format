@@ -19,6 +19,9 @@ import {
   isLengthDelim,
   isPackedOrVarInt,
   isVarInt,
+  kDecodeValue,
+  kEncodeToBuffer,
+  kMeasure,
   measureBoolField,
   measureMessageArrayField,
   measureMessageField,
@@ -31,7 +34,7 @@ import {
   verifyEncodedLength,
   yieldToEventLoop,
 } from './protobuf.js'
-import { StringTable, emptyTableToken } from './string-table.js'
+import { StringTable, emptyTableToken, kDecodeString } from './string-table.js'
 
 export { StringTable, emptyTableToken }
 
@@ -129,20 +132,23 @@ export class ValueType extends Message {
     this.unit = data.unit || 0
   }
 
-  _measure() {
+  /** @internal */
+  [kMeasure]() {
     let total = 0
     total += measureNumberField(ValueTypeField.type, this.type)
     total += measureNumberField(ValueTypeField.unit, this.unit)
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
+  /** @internal */
+  [kEncodeToBuffer](buffer: Uint8Array, offset = 0): number {
     offset = encodeNumberField(buffer, offset, ValueTypeField.type, this.type)
     offset = encodeNumberField(buffer, offset, ValueTypeField.unit, this.unit)
     return offset
   }
 
-  static decodeValue(data: ValueTypeInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
+  /** @internal */
+  static [kDecodeValue](data: ValueTypeInput, field: number, buffer: Uint8Array, start: number, end: number, wireType: number) {
     switch (field) {
       case ValueTypeField.type:
         if (isVarInt(wireType)) data.type = decodeNumber(buffer, start, end)
@@ -154,7 +160,7 @@ export class ValueType extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): ValueType {
-    return new this(decodeFields(buffer, this.decodeValue, start, end))
+    return new this(decodeFields(buffer, this[kDecodeValue], start, end))
   }
 }
 
@@ -183,7 +189,8 @@ export class Label extends Message {
     this.numUnit = data.numUnit || 0
   }
 
-  _measure() {
+  /** @internal */
+  [kMeasure]() {
     let total = 0
     total += measureNumberField(LabelField.key, this.key)
     total += measureNumberField(LabelField.str, this.str)
@@ -192,7 +199,8 @@ export class Label extends Message {
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
+  /** @internal */
+  [kEncodeToBuffer](buffer: Uint8Array, offset = 0): number {
     offset = encodeNumberField(buffer, offset, LabelField.key, this.key)
     offset = encodeNumberField(buffer, offset, LabelField.str, this.str)
     offset = encodeNumberField(buffer, offset, LabelField.num, this.num)
@@ -200,7 +208,8 @@ export class Label extends Message {
     return offset
   }
 
-  static decodeValue(data: LabelInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
+  /** @internal */
+  static [kDecodeValue](data: LabelInput, field: number, buffer: Uint8Array, start: number, end: number, wireType: number) {
     switch (field) {
       case LabelField.key:
         if (isVarInt(wireType)) data.key = decodeNumber(buffer, start, end)
@@ -218,7 +227,7 @@ export class Label extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Label {
-    return new this(decodeFields(buffer, this.decodeValue, start, end))
+    return new this(decodeFields(buffer, this[kDecodeValue], start, end))
   }
 }
 
@@ -244,7 +253,8 @@ export class Sample extends Message {
     this.label = (data.label || []).map(Label.create)
   }
 
-  _measure(context: EncodeContext) {
+  /** @internal */
+  [kMeasure](context: EncodeContext) {
     let total = 0
     total += measurePackedNumbersField(SampleField.locationId, this.locationId, context)
     total += measurePackedNumbersField(SampleField.value, this.value, context)
@@ -252,14 +262,16 @@ export class Sample extends Message {
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+  /** @internal */
+  [kEncodeToBuffer](buffer: Uint8Array, offset: number, context: EncodeContext): number {
     offset = encodePackedNumbersField(buffer, offset, SampleField.locationId, this.locationId, context)
     offset = encodePackedNumbersField(buffer, offset, SampleField.value, this.value, context)
     offset = encodeMessageArrayField(buffer, offset, SampleField.label, this.label, context)
     return offset
   }
 
-  static decodeValue(data: SampleInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
+  /** @internal */
+  static [kDecodeValue](data: SampleInput, field: number, buffer: Uint8Array, start: number, end: number, wireType: number) {
     switch (field) {
       case SampleField.locationId:
         if (isPackedOrVarInt(wireType)) data.locationId = pushAll(decodeNumbers(buffer, start, end), data.locationId)
@@ -274,7 +286,7 @@ export class Sample extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Sample {
-    return new this(decodeFields(buffer, this.decodeValue, start, end))
+    return new this(decodeFields(buffer, this[kDecodeValue], start, end))
   }
 }
 
@@ -321,7 +333,8 @@ export class Mapping extends Message {
     this.hasInlineFrames = !!data.hasInlineFrames
   }
 
-  _measure() {
+  /** @internal */
+  [kMeasure]() {
     let total = 0
     total += measureNumberField(MappingField.id, this.id)
     total += measureNumberField(MappingField.memoryStart, this.memoryStart)
@@ -336,7 +349,8 @@ export class Mapping extends Message {
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
+  /** @internal */
+  [kEncodeToBuffer](buffer: Uint8Array, offset = 0): number {
     offset = encodeNumberField(buffer, offset, MappingField.id, this.id)
     offset = encodeNumberField(buffer, offset, MappingField.memoryStart, this.memoryStart)
     offset = encodeNumberField(buffer, offset, MappingField.memoryLimit, this.memoryLimit)
@@ -350,7 +364,8 @@ export class Mapping extends Message {
     return offset
   }
 
-  static decodeValue(data: MappingInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
+  /** @internal */
+  static [kDecodeValue](data: MappingInput, field: number, buffer: Uint8Array, start: number, end: number, wireType: number) {
     switch (field) {
       case MappingField.id:
         if (isVarInt(wireType)) data.id = decodeNumber(buffer, start, end)
@@ -386,7 +401,7 @@ export class Mapping extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Mapping {
-    return new this(decodeFields(buffer, this.decodeValue, start, end))
+    return new this(decodeFields(buffer, this[kDecodeValue], start, end))
   }
 }
 
@@ -412,7 +427,8 @@ export class Line extends Message {
     this.column = data.column || 0
   }
 
-  _measure() {
+  /** @internal */
+  [kMeasure]() {
     let total = 0
     total += measureNumberField(LineField.functionId, this.functionId)
     total += measureNumberField(LineField.line, this.line)
@@ -420,14 +436,16 @@ export class Line extends Message {
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
+  /** @internal */
+  [kEncodeToBuffer](buffer: Uint8Array, offset = 0): number {
     offset = encodeNumberField(buffer, offset, LineField.functionId, this.functionId)
     offset = encodeNumberField(buffer, offset, LineField.line, this.line)
     offset = encodeNumberField(buffer, offset, LineField.column, this.column)
     return offset
   }
 
-  static decodeValue(data: LineInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
+  /** @internal */
+  static [kDecodeValue](data: LineInput, field: number, buffer: Uint8Array, start: number, end: number, wireType: number) {
     switch (field) {
       case LineField.functionId:
         if (isVarInt(wireType)) data.functionId = decodeNumber(buffer, start, end)
@@ -442,7 +460,7 @@ export class Line extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Line {
-    return new this(decodeFields(buffer, this.decodeValue, start, end))
+    return new this(decodeFields(buffer, this[kDecodeValue], start, end))
   }
 }
 
@@ -474,7 +492,8 @@ export class Location extends Message {
     this.isFolded = !!data.isFolded
   }
 
-  _measure(context: EncodeContext) {
+  /** @internal */
+  [kMeasure](context: EncodeContext) {
     let total = 0
     total += measureNumberField(LocationField.id, this.id)
     total += measureNumberField(LocationField.mappingId, this.mappingId)
@@ -484,7 +503,8 @@ export class Location extends Message {
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+  /** @internal */
+  [kEncodeToBuffer](buffer: Uint8Array, offset: number, context: EncodeContext): number {
     offset = encodeNumberField(buffer, offset, LocationField.id, this.id)
     offset = encodeNumberField(buffer, offset, LocationField.mappingId, this.mappingId)
     offset = encodeNumberField(buffer, offset, LocationField.address, this.address)
@@ -493,7 +513,8 @@ export class Location extends Message {
     return offset
   }
 
-  static decodeValue(data: LocationInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
+  /** @internal */
+  static [kDecodeValue](data: LocationInput, field: number, buffer: Uint8Array, start: number, end: number, wireType: number) {
     switch (field) {
       case LocationField.id:
         if (isVarInt(wireType)) data.id = decodeNumber(buffer, start, end)
@@ -514,7 +535,7 @@ export class Location extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Location {
-    return new this(decodeFields(buffer, this.decodeValue, start, end))
+    return new this(decodeFields(buffer, this[kDecodeValue], start, end))
   }
 }
 
@@ -546,7 +567,8 @@ export class Function extends Message {
     this.startLine = data.startLine || 0
   }
 
-  _measure() {
+  /** @internal */
+  [kMeasure]() {
     let total = 0
     total += measureNumberField(FunctionField.id, this.id)
     total += measureNumberField(FunctionField.name, this.name)
@@ -556,7 +578,8 @@ export class Function extends Message {
     return total
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset = 0): number {
+  /** @internal */
+  [kEncodeToBuffer](buffer: Uint8Array, offset = 0): number {
     offset = encodeNumberField(buffer, offset, FunctionField.id, this.id)
     offset = encodeNumberField(buffer, offset, FunctionField.name, this.name)
     offset = encodeNumberField(buffer, offset, FunctionField.systemName, this.systemName)
@@ -565,7 +588,8 @@ export class Function extends Message {
     return offset
   }
 
-  static decodeValue(data: FunctionInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
+  /** @internal */
+  static [kDecodeValue](data: FunctionInput, field: number, buffer: Uint8Array, start: number, end: number, wireType: number) {
     switch (field) {
       case FunctionField.id:
         if (isVarInt(wireType)) data.id = decodeNumber(buffer, start, end)
@@ -586,7 +610,7 @@ export class Function extends Message {
   }
 
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Function {
-    return new this(decodeFields(buffer, this.decodeValue, start, end))
+    return new this(decodeFields(buffer, this[kDecodeValue], start, end))
   }
 }
 
@@ -644,14 +668,15 @@ export class Profile extends Message {
     this.docUrl = data.docUrl || 0
   }
 
-  _measure(context: EncodeContext) {
+  /** @internal */
+  [kMeasure](context: EncodeContext) {
     let total = 0
     total += measureMessageArrayField(ProfileField.sampleType, this.sampleType, context)
     total += measureMessageArrayField(ProfileField.sample, this.sample, context)
     total += measureMessageArrayField(ProfileField.mapping, this.mapping, context)
     total += measureMessageArrayField(ProfileField.location, this.location, context)
     total += measureMessageArrayField(ProfileField.function, this.function, context)
-    total += this.stringTable._measure(ProfileField.stringTable)
+    total += this.stringTable[kMeasure](ProfileField.stringTable)
     total += measureNumberField(ProfileField.dropFrames, this.dropFrames)
     total += measureNumberField(ProfileField.keepFrames, this.keepFrames)
     total += measureNumberField(ProfileField.timeNanos, this.timeNanos)
@@ -664,27 +689,27 @@ export class Profile extends Message {
     return total
   }
 
-  _encodeSampleTypesToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+  #encodeSampleTypesToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
     return encodeMessageArrayField(buffer, offset, ProfileField.sampleType, this.sampleType, context)
   }
 
-  _encodeSamplesToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+  #encodeSamplesToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
     return encodeMessageArrayField(buffer, offset, ProfileField.sample, this.sample, context)
   }
 
-  _encodeMappingsToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+  #encodeMappingsToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
     return encodeMessageArrayField(buffer, offset, ProfileField.mapping, this.mapping, context)
   }
 
-  _encodeLocationsToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+  #encodeLocationsToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
     return encodeMessageArrayField(buffer, offset, ProfileField.location, this.location, context)
   }
 
-  _encodeFunctionsToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+  #encodeFunctionsToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
     return encodeMessageArrayField(buffer, offset, ProfileField.function, this.function, context)
   }
 
-  _encodeBasicValuesToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
+  #encodeBasicValuesToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
     offset = encodeNumberField(buffer, offset, ProfileField.dropFrames, this.dropFrames)
     offset = encodeNumberField(buffer, offset, ProfileField.keepFrames, this.keepFrames)
     offset = encodeNumberField(buffer, offset, ProfileField.timeNanos, this.timeNanos)
@@ -697,51 +722,53 @@ export class Profile extends Message {
     return offset
   }
 
-  _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number {
-    offset = this._encodeSampleTypesToBuffer(buffer, offset, context)
-    offset = this._encodeSamplesToBuffer(buffer, offset, context)
-    offset = this._encodeMappingsToBuffer(buffer, offset, context)
-    offset = this._encodeLocationsToBuffer(buffer, offset, context)
-    offset = this._encodeFunctionsToBuffer(buffer, offset, context)
-    offset = this.stringTable._encodeToBuffer(buffer, offset, ProfileField.stringTable)
-    offset = this._encodeBasicValuesToBuffer(buffer, offset, context)
+  /** @internal */
+  [kEncodeToBuffer](buffer: Uint8Array, offset: number, context: EncodeContext): number {
+    offset = this.#encodeSampleTypesToBuffer(buffer, offset, context)
+    offset = this.#encodeSamplesToBuffer(buffer, offset, context)
+    offset = this.#encodeMappingsToBuffer(buffer, offset, context)
+    offset = this.#encodeLocationsToBuffer(buffer, offset, context)
+    offset = this.#encodeFunctionsToBuffer(buffer, offset, context)
+    offset = this.stringTable[kEncodeToBuffer](buffer, offset, ProfileField.stringTable)
+    offset = this.#encodeBasicValuesToBuffer(buffer, offset, context)
     return offset
   }
 
-  /** Like _encodeToBuffer(), but yields between phases. */
-  async _encodeToBufferAsync(buffer: Uint8Array, offset: number, context: EncodeContext): Promise<number> {
-    offset = this._encodeSampleTypesToBuffer(buffer, offset, context)
+  /** Like [kEncodeToBuffer](), but yields between phases. */
+  async #encodeToBufferAsync(buffer: Uint8Array, offset: number, context: EncodeContext): Promise<number> {
+    offset = this.#encodeSampleTypesToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = this._encodeSamplesToBuffer(buffer, offset, context)
+    offset = this.#encodeSamplesToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = this._encodeMappingsToBuffer(buffer, offset, context)
+    offset = this.#encodeMappingsToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = this._encodeLocationsToBuffer(buffer, offset, context)
+    offset = this.#encodeLocationsToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = this._encodeFunctionsToBuffer(buffer, offset, context)
+    offset = this.#encodeFunctionsToBuffer(buffer, offset, context)
     await yieldToEventLoop()
 
-    offset = this.stringTable._encodeToBuffer(buffer, offset, ProfileField.stringTable)
+    offset = this.stringTable[kEncodeToBuffer](buffer, offset, ProfileField.stringTable)
     await yieldToEventLoop()
 
-    offset = this._encodeBasicValuesToBuffer(buffer, offset, context)
+    offset = this.#encodeBasicValuesToBuffer(buffer, offset, context)
     return offset
   }
 
   /** Like encode(), but yields between phases. Do not mutate until it settles. */
   async encodeAsync(buffer?: Uint8Array): Promise<Uint8Array> {
     const context = newEncodeContext()
-    const length = this._measure(context)
+    const length = this[kMeasure](context)
     buffer = prepareBuffer(buffer, length)
-    verifyEncodedLength(await this._encodeToBufferAsync(buffer, 0, context), length)
+    verifyEncodedLength(await this.#encodeToBufferAsync(buffer, 0, context), length)
     return buffer
   }
 
-  static decodeValue(data: ProfileInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
+  /** @internal */
+  static [kDecodeValue](data: ProfileInput, field: number, buffer: Uint8Array, start: number, end: number, wireType: number) {
     switch (field) {
       case ProfileField.sampleType:
         if (isLengthDelim(wireType)) data.sampleType = push(ValueType.decode(buffer, start, end), data.sampleType)
@@ -763,7 +790,7 @@ export class Profile extends Message {
         if (data.stringTable === undefined) {
           data.stringTable = new StringTable(emptyTableToken)
         }
-        data.stringTable._decodeString(buffer.subarray(start, end))
+        data.stringTable[kDecodeString](buffer.subarray(start, end))
         break
       }
       case ProfileField.dropFrames:
@@ -782,7 +809,7 @@ export class Profile extends Message {
         // Occurrences of a singular message field are merged:
         // https://protobuf.dev/programming-guides/encoding/#last-one-wins
         if (isLengthDelim(wireType)) {
-          data.periodType = new ValueType(decodeFields(buffer, ValueType.decodeValue, start, end, { ...data.periodType }))
+          data.periodType = new ValueType(decodeFields(buffer, ValueType[kDecodeValue], start, end, { ...data.periodType }))
         }
         break
       case ProfileField.period:
@@ -805,6 +832,6 @@ export class Profile extends Message {
    * fields and fields whose wire type differs from the declared one.
    */
   static decode(buffer: Uint8Array, start = 0, end = buffer.length): Profile {
-    return new this(decodeFields(buffer, this.decodeValue, start, end))
+    return new this(decodeFields(buffer, this[kDecodeValue], start, end))
   }
 }

@@ -27,6 +27,7 @@ import {
 import * as otel from './otel.js'
 import { StringTable as PprofStringTable } from './index.js'
 import type { EncodeContext } from './protobuf.js'
+import { kMeasure } from './protobuf.js'
 
 const pb = otelProto.opentelemetry.proto
 
@@ -246,9 +247,9 @@ test('ExportProfilesServiceRequest.encodeAsync', async (t) => {
   })
 
   await t.test('measures each submessage once', async () => {
-    const measure = Sample.prototype._measure
+    const measure = Sample.prototype[kMeasure]
     let calls = 0
-    Sample.prototype._measure = function (this: Sample, context: EncodeContext) {
+    Sample.prototype[kMeasure] = function (this: Sample, context: EncodeContext) {
       calls++
       return measure.call(this, context)
     }
@@ -256,7 +257,7 @@ test('ExportProfilesServiceRequest.encodeAsync', async (t) => {
       await new ExportProfilesServiceRequest(exampleRequest()).encodeAsync()
       assert.strictEqual(calls, 2)
     } finally {
-      Sample.prototype._measure = measure
+      Sample.prototype[kMeasure] = measure
     }
   })
 

@@ -22,6 +22,8 @@ import {
   encodeMessageField,
   encodeNumberField,
   encodePackedFixed64Field,
+  kEncodeToBuffer,
+  kMeasure,
   kTypeFixed32,
   kTypeFixed64,
   kTypeLengthDelim,
@@ -34,7 +36,7 @@ import {
   measurePackedFixed64Field,
   newEncodeContext
 } from './protobuf.js'
-import { Label, LabelInput, Profile, Sample, StringTable, ValueType, emptyTableToken } from './index.js'
+import { Label, Profile, Sample, StringTable, ValueType, emptyTableToken } from './index.js'
 
 function hex(buf: Uint8Array) {
   return Buffer.from(buf).toString('hex')
@@ -285,9 +287,9 @@ test('message fields', async (t) => {
   })
 
   await t.test('measures each submessage once per encode', async () => {
-    const measure = Label.prototype._measure
+    const measure = Label.prototype[kMeasure]
     let calls = 0
-    Label.prototype._measure = function (this: Label) {
+    Label.prototype[kMeasure] = function (this: Label) {
       calls++
       return measure.call(this)
     }
@@ -299,7 +301,7 @@ test('message fields', async (t) => {
       await profile.encodeAsync()
       assert.strictEqual(calls, 2, 'encodeAsync()')
     } finally {
-      Label.prototype._measure = measure
+      Label.prototype[kMeasure] = measure
     }
   })
 
@@ -319,11 +321,11 @@ test('message fields', async (t) => {
         super()
       }
 
-      _measure(context: EncodeContext) {
+      [kMeasure](context: EncodeContext) {
         return measureMessageField(1, this.inner, context)
       }
 
-      _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext) {
+      [kEncodeToBuffer](buffer: Uint8Array, offset: number, context: EncodeContext) {
         return encodeMessageField(buffer, offset, 1, this.inner, context)
       }
     }
@@ -363,8 +365,8 @@ test('StringTable is encoded as the field its message supplies', () => {
   const table = new StringTable()
   table.dedup('hi')
   for (const [field, entries] of [[5, '2a00' + '2a026869'], [16, '820100' + '8201026869']] as const) {
-    const buffer = new Uint8Array(table._measure(field))
-    assert.strictEqual(table._encodeToBuffer(buffer, 0, field), buffer.length, `measured length of field ${field}`)
+    const buffer = new Uint8Array(table[kMeasure](field))
+    assert.strictEqual(table[kEncodeToBuffer](buffer, 0, field), buffer.length, `measured length of field ${field}`)
     assert.strictEqual(hex(buffer), entries)
   }
   // On its own, and in a profile, the table is pprof's string_table
@@ -375,11 +377,11 @@ test('StringTable is encoded as the field its message supplies', () => {
 
 test('encoding checks', async (t) => {
   class Lying extends Message {
-    _measure() {
+    [kMeasure]() {
       return 3
     }
 
-    _encodeToBuffer(buffer: Uint8Array, offset = 0) {
+    [kEncodeToBuffer](buffer: Uint8Array, offset = 0) {
       return encodeNumberField(buffer, offset, 1, 1)
     }
   }
@@ -426,11 +428,5 @@ test('decoders skip fields with mismatched wire types', async (t) => {
     assert.deepStrictEqual(profile.sample, [])
     assert.deepStrictEqual(profile.stringTable.strings, [''])
     assert.strictEqual(profile.period, 7)
-  })
-
-  await t.test('decodeValue without a wire type decodes as before', () => {
-    const data: LabelInput = {}
-    Label.decodeValue(data, 1, fromHex('05'))
-    assert.strictEqual(data.key, 5)
   })
 })
