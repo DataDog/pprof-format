@@ -5,6 +5,7 @@
     "rootDir": "src",
     "moduleResolution": "Node16",
     "declaration": true,
+    "stripInternal": true,
     "noImplicitAny": true,
     "preserveConstEnums": true,
     "sourceMap": true,

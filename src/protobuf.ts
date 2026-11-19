@@ -18,10 +18,9 @@ export const kTypeFixed64 = 1
 export const kTypeLengthDelim = 2
 export const kTypeFixed32 = 5
 
-// Prefer Buffer.from for speed; use TextEncoder in browsers.
-export const toUtf8 = typeof Buffer === 'undefined'
-  ? (value: string) => new TextEncoder().encode(value)
-  : (value: string) => Buffer.from(value, 'utf8')
+export const kDecodeValue = Symbol()
+export const kEncodeToBuffer = Symbol.for('pprof-format.codec.v3.encodeToBuffer')
+export const kMeasure = Symbol.for('pprof-format.codec.v3.measure')
 
 /* Private helpers. */
 
@@ -291,21 +290,23 @@ export function newEncodeContext(): EncodeContext {
 export abstract class Message {
   /** The encoded length of the message in bytes. */
   get length(): number {
-    return this._measure(newEncodeContext())
+    return this[kMeasure](newEncodeContext())
   }
 
   /** Measures the message, recording its submessages' lengths in `context`. */
-  abstract _measure(context: EncodeContext): number
+  /** @internal */
+  abstract [kMeasure](context: EncodeContext): number
 
   /** Encodes the message, reading its submessages' lengths from `context`. */
-  abstract _encodeToBuffer(buffer: Uint8Array, offset: number, context: EncodeContext): number
+  /** @internal */
+  abstract [kEncodeToBuffer](buffer: Uint8Array, offset: number, context: EncodeContext): number
 
   /** Encodes into the given buffer or a new one. Throws RangeError if too small. */
   encode(buffer?: Uint8Array): Uint8Array {
     const context = newEncodeContext()
-    const length = this._measure(context)
+    const length = this[kMeasure](context)
     const target = prepareBuffer(buffer, length)
-    verifyEncodedLength(this._encodeToBuffer(target, 0, context), length)
+    verifyEncodedLength(this[kEncodeToBuffer](target, 0, context), length)
     return target
   }
 }
@@ -507,7 +508,7 @@ export function measureMessageField(field: number, message: Message | undefined,
   if (message === undefined) return 0
   // Reserve the parent's slot first to match length-prefix order.
   const slot = context.lengths.push(0) - 1
-  const length = message._measure(context)
+  const length = message[kMeasure](context)
   context.lengths[slot] = length
   return measureTag(field) + varintLength(length) + length
 }
@@ -515,7 +516,7 @@ export function measureMessageField(field: number, message: Message | undefined,
 export function encodeMessageField(buffer: Uint8Array, offset: number, field: number, message: Message | undefined, context: EncodeContext): number {
   if (message === undefined) return offset
   offset = encodeMessageFieldHeader(buffer, offset, field, context)
-  return message._encodeToBuffer(buffer, offset, context)
+  return message[kEncodeToBuffer](buffer, offset, context)
 }
 
 /** Encodes a message field's tag and recorded length, for encoding its fields separately. */
@@ -540,24 +541,23 @@ export function encodeMessageArrayField(buffer: Uint8Array, offset: number, fiel
 }
 
 /*
- * Skip mismatched wire types like unknown fields. An undefined wire type means
- * the caller omitted it when calling decodeValue directly, and is accepted.
+ * Skip mismatched wire types like unknown fields.
  */
 
-export function isVarInt(wireType: number | undefined): boolean {
-  return wireType === undefined || wireType === kTypeVarInt
+export function isVarInt(wireType: number): boolean {
+  return wireType === kTypeVarInt
 }
 
-export function isLengthDelim(wireType: number | undefined): boolean {
-  return wireType === undefined || wireType === kTypeLengthDelim
+export function isLengthDelim(wireType: number): boolean {
+  return wireType === kTypeLengthDelim
 }
 
-export function isFixed64(wireType: number | undefined): boolean {
-  return wireType === undefined || wireType === kTypeFixed64
+export function isFixed64(wireType: number): boolean {
+  return wireType === kTypeFixed64
 }
 
 /** Accepts both packed and unpacked varints for repeated fields. */
-export function isPackedOrVarInt(wireType: number | undefined): boolean {
+export function isPackedOrVarInt(wireType: number): boolean {
   return isVarInt(wireType) || wireType === kTypeLengthDelim
 }
 

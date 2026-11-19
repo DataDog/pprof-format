@@ -9,12 +9,13 @@ import type { TestContext } from 'node:test'
 import assert from 'node:assert'
 import { Buffer as NodeBuffer } from 'node:buffer'
 import { spawnSync } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'zlib'
 import * as fs from 'fs'
 
 import proto from '../testing/proto/profile.js'
-import { ProfilesDictionary } from './otel.js'
+import { ProfilesData, ProfilesDictionary } from './otel.js'
 
 const {decode, toObject} = proto.perftools.profiles.Profile
 
@@ -458,6 +459,56 @@ function hexToBuf(hex: string) {
 function bufToHex(buf: Uint8Array) {
   return Array.from(buf).map(hexNum).join('')
 }
+
+test('string tables work across the CommonJS and ESM entry points', async () => {
+  const esm = await import('pprof-format')
+  const cjs: typeof esm = createRequire(import.meta.url)('pprof-format')
+
+  for (const [input, output] of [[cjs, esm], [esm, cjs]]) {
+    const table = new input.StringTable()
+    table.dedup('cpu')
+    const profile = new output.Profile({ stringTable: table })
+    assert.deepStrictEqual(output.Profile.decode(profile.encode()).stringTable.strings, ['', 'cpu'])
+  }
+})
+
+test('CommonJS labels are assignable to ESM samples', async () => {
+  const esm = await import('pprof-format')
+  const cjs: typeof import('pprof-format', { with: { 'resolution-mode': 'require' } }) =
+    createRequire(import.meta.url)('pprof-format')
+  const sample = new esm.Sample({})
+  sample.label.push(new cjs.Label({ key: 1 }))
+  assert.strictEqual(esm.Sample.decode(sample.encode()).label[0].key, 1)
+})
+
+test('OTel dictionaries work across entry points with both encoders', async () => {
+  const esm = await import('pprof-format/otel')
+  const cjs: typeof esm = createRequire(import.meta.url)('pprof-format/otel')
+
+  for (const [input, output] of [[cjs, esm], [esm, cjs]]) {
+    const table = new input.StringTable()
+    table.dedup('cpu')
+    const profiles = new output.ProfilesData({})
+    profiles.dictionary = new input.ProfilesDictionary({ stringTable: table })
+
+    const encoded = await profiles.encodeAsync()
+    assert.deepStrictEqual(encoded, profiles.encode())
+    assert.deepStrictEqual(output.ProfilesData.decode(encoded).dictionary?.stringTable.strings, ['', 'cpu'])
+  }
+})
+
+test('codec implementation methods are not exposed by the public classes', () => {
+  for (const type of [ValueType, Label, Sample, Profile, ProfilesData, ProfilesDictionary, StringTable]) {
+    assert.strictEqual(Reflect.has(type, 'decodeValue'), false)
+    assert.strictEqual(Reflect.has(type, 'decodeInput'), false)
+    assert.strictEqual(Reflect.has(type.prototype, '_measure'), false)
+    assert.strictEqual(Reflect.has(type.prototype, '_encodeToBuffer'), false)
+    assert.strictEqual(Reflect.has(type.prototype, '_encodeToBufferAsync'), false)
+  }
+  assert.strictEqual(Reflect.has(StringTable, '_encodeString'), false)
+  assert.strictEqual(Reflect.has(StringTable, '_encodeStringFromUtf8'), false)
+  assert.strictEqual(Reflect.has(StringTable.prototype, '_decodeString'), false)
+})
 
 test('StringTable', async (t) => {
   await t.test('encodes correctly', async () => {
