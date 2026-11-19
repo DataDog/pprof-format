@@ -542,6 +542,19 @@ function profileToObject(profile: any): object {
   return profile
 }
 
+test('StringTable.dedup rejects non-strings without changing the table', () => {
+  const table = new StringTable()
+  for (const value of [0, 42, 42n, undefined, null, {}, new Uint8Array([97])]) {
+    assert.throws(() => Reflect.apply(table.dedup, table, [value]), {
+      name: 'TypeError',
+      message: 'StringTable.dedup expects a string',
+    })
+  }
+  assert.deepStrictEqual(table.strings, [''])
+  assert.strictEqual(table.dedup('42'), 1)
+  assert.strictEqual(table.dedup('42'), 1)
+})
+
 test('Protobufjs compat', async (t) => {
   await t.test('encodes correctly', async () => {
     const profile = new Profile(profileData)
