@@ -9,6 +9,8 @@ import {
   Message,
   Numeric,
   decodeFields,
+  decodeInt64,
+  decodeInt64s,
   decodeNumber,
   decodeNumbers,
   encodeBoolField,
@@ -145,10 +147,10 @@ export class ValueType extends Message {
   static decodeValue(data: ValueTypeInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
       case ValueTypeField.type:
-        if (isVarInt(wireType)) data.type = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.type = decodeInt64(buffer, start, end)
         break
       case ValueTypeField.unit:
-        if (isVarInt(wireType)) data.unit = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.unit = decodeInt64(buffer, start, end)
         break
     }
   }
@@ -203,16 +205,16 @@ export class Label extends Message {
   static decodeValue(data: LabelInput, field: number, buffer: Uint8Array, start = 0, end = buffer.length, wireType?: number) {
     switch (field) {
       case LabelField.key:
-        if (isVarInt(wireType)) data.key = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.key = decodeInt64(buffer, start, end)
         break
       case LabelField.str:
-        if (isVarInt(wireType)) data.str = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.str = decodeInt64(buffer, start, end)
         break
       case LabelField.num:
-        if (isVarInt(wireType)) data.num = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.num = decodeInt64(buffer, start, end)
         break
       case LabelField.numUnit:
-        if (isVarInt(wireType)) data.numUnit = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.numUnit = decodeInt64(buffer, start, end)
         break
     }
   }
@@ -265,7 +267,7 @@ export class Sample extends Message {
         if (isPackedOrVarInt(wireType)) data.locationId = pushAll(decodeNumbers(buffer, start, end), data.locationId)
         break
       case SampleField.value:
-        if (isPackedOrVarInt(wireType)) data.value = pushAll(decodeNumbers(buffer, start, end), data.value)
+        if (isPackedOrVarInt(wireType)) data.value = pushAll(decodeInt64s(buffer, start, end), data.value)
         break
       case SampleField.label:
         if (isLengthDelim(wireType)) data.label = push(Label.decode(buffer, start, end), data.label)
@@ -365,10 +367,10 @@ export class Mapping extends Message {
         if (isVarInt(wireType)) data.fileOffset = decodeNumber(buffer, start, end)
         break
       case MappingField.filename:
-        if (isVarInt(wireType)) data.filename = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.filename = decodeInt64(buffer, start, end)
         break
       case MappingField.buildId:
-        if (isVarInt(wireType)) data.buildId = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.buildId = decodeInt64(buffer, start, end)
         break
       case MappingField.hasFunctions:
         if (isVarInt(wireType)) data.hasFunctions = !!decodeNumber(buffer, start, end)
@@ -433,10 +435,10 @@ export class Line extends Message {
         if (isVarInt(wireType)) data.functionId = decodeNumber(buffer, start, end)
         break
       case LineField.line:
-        if (isVarInt(wireType)) data.line = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.line = decodeInt64(buffer, start, end)
         break
       case LineField.column:
-        if (isVarInt(wireType)) data.column = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.column = decodeInt64(buffer, start, end)
         break
     }
   }
@@ -571,16 +573,16 @@ export class Function extends Message {
         if (isVarInt(wireType)) data.id = decodeNumber(buffer, start, end)
         break
       case FunctionField.name:
-        if (isVarInt(wireType)) data.name = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.name = decodeInt64(buffer, start, end)
         break
       case FunctionField.systemName:
-        if (isVarInt(wireType)) data.systemName = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.systemName = decodeInt64(buffer, start, end)
         break
       case FunctionField.filename:
-        if (isVarInt(wireType)) data.filename = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.filename = decodeInt64(buffer, start, end)
         break
       case FunctionField.startLine:
-        if (isVarInt(wireType)) data.startLine = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.startLine = decodeInt64(buffer, start, end)
         break
     }
   }
@@ -767,16 +769,16 @@ export class Profile extends Message {
         break
       }
       case ProfileField.dropFrames:
-        if (isVarInt(wireType)) data.dropFrames = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.dropFrames = decodeInt64(buffer, start, end)
         break
       case ProfileField.keepFrames:
-        if (isVarInt(wireType)) data.keepFrames = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.keepFrames = decodeInt64(buffer, start, end)
         break
       case ProfileField.timeNanos:
-        if (isVarInt(wireType)) data.timeNanos = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.timeNanos = decodeInt64(buffer, start, end)
         break
       case ProfileField.durationNanos:
-        if (isVarInt(wireType)) data.durationNanos = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.durationNanos = decodeInt64(buffer, start, end)
         break
       case ProfileField.periodType:
         // Occurrences of a singular message field are merged:
@@ -786,16 +788,16 @@ export class Profile extends Message {
         }
         break
       case ProfileField.period:
-        if (isVarInt(wireType)) data.period = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.period = decodeInt64(buffer, start, end)
         break
       case ProfileField.comment:
-        if (isPackedOrVarInt(wireType)) data.comment = pushAll(decodeNumbers(buffer, start, end), data.comment)
+        if (isPackedOrVarInt(wireType)) data.comment = pushAll(decodeInt64s(buffer, start, end), data.comment)
         break
       case ProfileField.defaultSampleType:
-        if (isVarInt(wireType)) data.defaultSampleType = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.defaultSampleType = decodeInt64(buffer, start, end)
         break
       case ProfileField.docUrl:
-        if (isVarInt(wireType)) data.docUrl = decodeNumber(buffer, start, end)
+        if (isVarInt(wireType)) data.docUrl = decodeInt64(buffer, start, end)
         break
     }
   }
