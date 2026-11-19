@@ -10,6 +10,7 @@ import assert from 'node:assert'
 import { Buffer as NodeBuffer } from 'node:buffer'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { inspect } from 'node:util'
 import { gunzipSync } from 'zlib'
 import * as fs from 'fs'
 
@@ -460,6 +461,28 @@ function bufToHex(buf: Uint8Array) {
 }
 
 test('StringTable', async (t) => {
+  await t.test('exposes a read-only snapshot without changing encoded strings', () => {
+    const table = new StringTable()
+    const index = table.dedup('abc')
+    const strings = table.strings
+
+    assert.strictEqual(Reflect.set(strings, index, 'x'), false)
+    assert.strictEqual(Reflect.set(table, 'strings', []), false)
+    assert.strictEqual(table.dedup('abc'), index)
+    assert.strictEqual(table.strings, strings)
+
+    table.dedup('def')
+    assert.deepStrictEqual(strings, ['', 'abc'])
+    assert.deepStrictEqual(table.strings, ['', 'abc', 'def'])
+    const decoded = Profile.decode(new Profile({ stringTable: table }).encode())
+    assert.deepStrictEqual(decoded.stringTable.strings, table.strings)
+    assert.deepStrictEqual({ ...decoded.stringTable }, { strings: ['', 'abc', 'def'] })
+    assert.strictEqual(JSON.stringify(decoded.stringTable), '{"strings":["","abc","def"]}')
+    assert.match(inspect(decoded), /'abc'/)
+    assert.strictEqual(Reflect.set(decoded.stringTable.strings, index, 'x'), false)
+    assert.deepStrictEqual(Profile.decode(decoded.encode()).stringTable.strings, table.strings)
+  })
+
   await t.test('encodes correctly', async () => {
     const encodings = {
       '': '3200',
