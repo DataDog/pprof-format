@@ -18,6 +18,8 @@ import {
 
 export const emptyTableToken = Symbol()
 
+const inspect = Symbol.for('nodejs.util.inspect.custom')
+
 // pprof's Profile.string_table, which the table's own encode() produces
 const pprofStringTableField = 6
 
@@ -52,18 +54,35 @@ function utf8Writer(buffer: Uint8Array): (value: string, offset: number) => void
  * table, so one table type serves both pprof and OTel.
  */
 export class StringTable {
-  strings = new Array<string>()
+  declare readonly strings: readonly string[]
+  #strings = new Array<string>()
+  #snapshot?: readonly string[]
   #byteLengths = new Array<number>()
   // The bytes of strings read from a profile, which re-encoding reproduces exactly
   #decoded = new Array<Uint8Array | undefined>()
   #positions = new Map<string, number>()
   #encodedLength = 0
 
+  static #stringsDescriptor = {
+    enumerable: true,
+    get(this: StringTable): readonly string[] {
+      if (this.#snapshot?.length !== this.#strings.length) {
+        this.#snapshot = Object.freeze(this.#strings.slice())
+      }
+      return this.#snapshot
+    },
+  }
+
   /** @param tok - emptyTableToken omits the initial empty string. */
   constructor(tok?: typeof emptyTableToken) {
+    Object.defineProperty(this, 'strings', StringTable.#stringsDescriptor)
     if (tok !== emptyTableToken) {
       this.dedup('')
     }
+  }
+
+  [inspect]() {
+    return { strings: this.strings }
   }
 
   /** The encoded length of the strings as pprof's string_table. */
@@ -87,7 +106,7 @@ export class StringTable {
       if (decoded !== undefined) {
         buffer.set(decoded, offset)
       } else if (byteLength > 0) {
-        writeUtf8(this.strings[i], offset)
+        writeUtf8(this.#strings[i], offset)
       }
       offset += byteLength
     }
@@ -130,7 +149,7 @@ export class StringTable {
   }
 
   #add(value: string, byteLength: number): number {
-    const position = this.strings.push(value) - 1
+    const position = this.#strings.push(value) - 1
     this.#positions.set(value, position)
     this.#byteLengths.push(byteLength)
     this.#encodedLength += varintLength(byteLength) + byteLength

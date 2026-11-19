@@ -118,6 +118,10 @@ a dictionary shared by all profiles of a request. Each dictionary table starts
 with the zero value of its type at index 0, which means "not set"; tables that
 aren't given default to just that entry.
 
+In both codecs, read strings by index or iterate over `table.strings`. It
+returns a frozen snapshot. Read it again after adding strings with
+`table.dedup()`.
+
 ```js
 import {
   ExportProfilesServiceRequest,
