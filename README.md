@@ -5,6 +5,9 @@ browser support. No protobuf, because the pprof spec only uses a tiny fraction
 of the features. Uint8Arrays rather than Node.js buffers so it can work in the
 browser. Carefully tuned to be as fast as possible.
 
+Browsers must support private class fields and methods to load the package
+without transpilation.
+
 ## Install
 
 ```sh

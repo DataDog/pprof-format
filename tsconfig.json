@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
-    "target": "es2020",
+    "target": "es2022",
+    "useDefineForClassFields": false,
     "module": "Node16",
     "rootDir": "src",
     "moduleResolution": "Node16",
